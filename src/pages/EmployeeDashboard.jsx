@@ -1,13 +1,25 @@
-import React, { useState, useMemo, useEffect } from 'react'; // Added useEffect
+import React, { useState, useMemo, useEffect, Suspense } from 'react'; // Added useEffect
 import DashboardLayout from '../layouts/DashboardLayout';
 import KPICard from '../components/KPICard';
 import DataTable from '../components/DataTable';
 import ProductSelector from '../components/ProductSelector';
-import BillingCart from '../components/BillingCart';
+import WebSocketStatus from '../components/WebSocketStatus';
 import { useAppContext } from '../context/AppContext';
 import { isToday, isThisWeek } from '../utils/helpers';
 import { getProducts,getAnalytics } from "../services/api"; // Added API import
 import { Html5Qrcode } from "html5-qrcode";
+import { lazyWithTracking } from "../utils/performance";
+import websocketService from '../services/websocket';
+
+// Lazy loaded billing component with performance tracking
+const BillingCart = lazyWithTracking(() => import('../components/BillingCart'), 'billing-cart');
+
+// Loading component for billing cart
+const BillingLoader = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+  </div>
+);
 
 const EmployeeDashboard = () => {
   // Removed 'products' from useAppContext as it now comes from the backend
@@ -27,6 +39,7 @@ const EmployeeDashboard = () => {
   const [scanner, setScanner] = useState(null)
 
 const [lowStockProducts, setLowStockProducts] = useState([])
+  const [wsConnected, setWsConnected] = useState(false)
   
   const columns = [
   { field: "id", headerName: "ID", width: 90 },
@@ -39,7 +52,7 @@ const [lowStockProducts, setLowStockProducts] = useState([])
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const token = localStorage.getItem("retailflow_token");
+        const token = sessionStorage.getItem("retailflow_token");
         const data = await getProducts(token);
         setProducts(data);
       } catch (err) {
@@ -101,7 +114,7 @@ useEffect(() => {
 const loadAnalytics = async () => {
   try {
 
-    const token = localStorage.getItem("retailflow_token")
+    const token = sessionStorage.getItem("retailflow_token")
 
     const bestRes = await fetch("http://127.0.0.1:8000/analytics/top-products", {
       headers: {
@@ -204,7 +217,7 @@ const worstMapped = worstData.map((item, index) => ({
 const loadKPIs = async () => {
   try {
 
-    const token = localStorage.getItem("retailflow_token")
+    const token = sessionStorage.getItem("retailflow_token")
 
     const res = await fetch("http://127.0.0.1:8000/analytics/sales-summary", {
       headers: { Authorization: `Bearer ${token}` }
@@ -224,7 +237,7 @@ const loadKPIs = async () => {
 const loadLowStock = async () => {
   try {
 
-    const token = localStorage.getItem("retailflow_token")
+    const token = sessionStorage.getItem("retailflow_token")
 
     const res = await fetch("http://127.0.0.1:8000/analytics/low-stock-products", {
       headers: { Authorization: `Bearer ${token}` }
@@ -243,6 +256,79 @@ useEffect(() => {
   loadKPIs()
   loadLowStock()
 }, [])
+
+// WebSocket connection effect
+useEffect(() => {
+  const token = sessionStorage.getItem("retailflow_token");
+  
+  console.log('WebSocket effect running, token exists:', !!token);
+  
+  if (token) {
+    // Connect to WebSocket
+    websocketService.connect(token)
+      .then(() => {
+        console.log('WebSocket connected successfully');
+        setWsConnected(true);
+      })
+      .catch((error) => {
+        console.error('Failed to connect WebSocket:', error);
+        setWsConnected(false);
+        // Fallback: set up periodic polling if WebSocket fails
+        const pollInterval = setInterval(() => {
+          console.log('Polling KPI data as WebSocket fallback');
+          loadKPIs();
+        }, 30000); // Poll every 30 seconds
+        
+        return () => clearInterval(pollInterval);
+      });
+
+    // Set up event listeners
+    const handleSalesUpdate = (data) => {
+      console.log('Received sales update:', data);
+      setKpiData({
+        soldToday: data.items_sold_today,
+        soldWeek: data.items_sold_week
+      });
+    };
+
+    const handleOrderCreated = (data) => {
+      console.log('Received order created notification:', data);
+      // Optionally show a notification or refresh other data
+      loadKPIs(); // Refresh KPIs to ensure consistency
+    };
+
+    websocketService.on('sales_update', handleSalesUpdate);
+    websocketService.on('order_created', handleOrderCreated);
+
+    // Cleanup on unmount
+    return () => {
+      console.log('Cleaning up WebSocket connection');
+      websocketService.off('sales_update', handleSalesUpdate);
+      websocketService.off('order_created', handleOrderCreated);
+      websocketService.disconnect();
+      setWsConnected(false);
+    };
+  } else {
+    console.log('No token found, WebSocket not connecting');
+  }
+}, [])
+
+// Listen for custom KPI update events from BillingCart
+useEffect(() => {
+  const handleKpiUpdate = (event) => {
+    console.log('Received KPI update event:', event.detail);
+    setKpiData({
+      soldToday: event.detail.soldToday,
+      soldWeek: event.detail.soldWeek
+    });
+  };
+
+  window.addEventListener('kpiUpdate', handleKpiUpdate);
+  
+  return () => {
+    window.removeEventListener('kpiUpdate', handleKpiUpdate);
+  };
+}, [])
   const productColumns = [
     { label: "#", key: "id" },
   { label: "Product Name", key: "name" },
@@ -253,7 +339,26 @@ useEffect(() => {
 
   const handleSaleComplete = () => {
     setShowBilling(false);
-    // Pro-tip: Re-fetch products here to update stock levels after a sale
+    // WebSocket will automatically update the KPIs, but we can also refresh products
+    // and KPIs immediately to ensure updates
+    const refreshData = async () => {
+      try {
+        const token = sessionStorage.getItem("retailflow_token");
+        
+        // Refresh products to update stock levels
+        const productData = await getProducts(token);
+        setProducts(productData);
+        
+        // Also refresh KPIs as backup
+        await loadKPIs();
+        
+        console.log('Data refreshed after sale completion');
+      } catch (err) {
+        console.error("Failed to refresh data after sale:", err);
+      }
+    };
+    
+    refreshData();
   };
 
   return (
@@ -264,12 +369,14 @@ useEffect(() => {
     title="Items Sold Today"
     value={kpiData.soldToday}
     icon="📦"
+    subtitle={wsConnected ? "🟢 Live" : "🔴 Offline"}
   />
 
   <KPICard
     title="Items Sold This Week"
     value={kpiData.soldWeek}
     icon="📊"
+    subtitle={wsConnected ? "🟢 Live" : "🔴 Offline"}
   />
 
   <KPICard
@@ -313,7 +420,9 @@ useEffect(() => {
 
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <ProductSelector products={products} />
-      <BillingCart onSaleComplete={handleSaleComplete} />
+      <Suspense fallback={<BillingLoader />}>
+        <BillingCart onSaleComplete={handleSaleComplete} />
+      </Suspense>
     </div>
 
   </div>
@@ -375,6 +484,9 @@ useEffect(() => {
           </>
         )}
       </div>
+      
+      {/* WebSocket Status Indicator */}
+      <WebSocketStatus connected={wsConnected} userRole="Employee" />
     </DashboardLayout>
   );
 };

@@ -1,6 +1,6 @@
 import React from 'react';
 
-const KPICard = ({ title, value, trend, icon, isPositive = true, prefix = '', suffix = '' }) => {
+const KPICard = ({ title, value, trend, icon, isPositive = true, prefix = '', suffix = '', subtitle = '' }) => {
   return (
     <div className="card p-6 hover:shadow-lg transition-all duration-200">
       <div className="flex items-start justify-between">
@@ -9,6 +9,9 @@ const KPICard = ({ title, value, trend, icon, isPositive = true, prefix = '', su
           <p className="text-4xl font-bold text-gray-900 mb-3 tracking-tight">
             {prefix}{typeof value === 'number' ? value.toLocaleString() : value}{suffix}
           </p>
+          {subtitle && (
+            <p className="text-sm text-gray-600 mb-2">{subtitle}</p>
+          )}
           {trend && (
             <div className="flex items-center">
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

@@ -30,7 +30,7 @@ const BillingCart = ({ onSaleComplete }) => {
 
     setIsProcessing(true);
     try {
-      const token = localStorage.getItem("retailflow_token")
+      const token = sessionStorage.getItem("retailflow_token")
 
       // 3. Map local cart items to the format the backend expects (barcode + quantity)
       const order = {
@@ -47,6 +47,27 @@ const BillingCart = ({ onSaleComplete }) => {
         clearCart(); // Clear local UI cart after successful DB entry
         
         await getProducts() 
+
+        // Force immediate refresh of KPI data
+        try {
+          const kpiResponse = await fetch("http://127.0.0.1:8000/analytics/sales-summary", {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          if (kpiResponse.ok) {
+            const kpiData = await kpiResponse.json();
+            console.log('KPI data refreshed:', kpiData);
+            // Emit a custom event to notify the dashboard
+            window.dispatchEvent(new CustomEvent('kpiUpdate', { 
+              detail: {
+                soldToday: kpiData.items_sold_today,
+                soldWeek: kpiData.items_sold_week
+              }
+            }));
+          }
+        } catch (err) {
+          console.error('Failed to refresh KPI data:', err);
+        }
 
         if (onSaleComplete) {
           onSaleComplete(result);

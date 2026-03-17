@@ -8,6 +8,7 @@ from app.api.router.dependency import get_current_user, require_owner, require_e
 from app.db.mongodb import db_manager
 from app.schemas.product_schema import ProductCreate, ProductResponse,LowStockProductResponse
 from app.core.rate_limit import limiter
+from app.core.cache import cache_manager, product_cache_key, CacheTTL
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -72,6 +73,12 @@ async def get_products(
     limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
     user=Depends(get_current_user)
 ):
+    cache_key = product_cache_key(page=page, limit=limit)
+    
+    # Try to get from cache first
+    cached_products = await cache_manager.get(cache_key)
+    if cached_products is not None:
+        return cached_products
     
     skip_value = (page - 1) * limit 
     products = []
@@ -80,27 +87,49 @@ async def get_products(
         del product["_id"]
         products.append(product)
 
+    # Cache the result
+    await cache_manager.set(cache_key, products, CacheTTL.MEDIUM)
+    
     return products
 
 @router.get("/low-stock",response_model=List[LowStockProductResponse])
-async def get_product(user=Depends(get_current_user)):
+async def get_low_stock_products(
+    page: int = Query(1, ge=1, le=1000, description="Page number for pagination"),
+    limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    user=Depends(get_current_user)
+):
+    cache_key = f"products:low-stock:{page}:{limit}"
+    
+    # Try to get from cache first
+    cached_products = await cache_manager.get(cache_key)
+    if cached_products is not None:
+        return cached_products
+    
     products = []
     
-    async for product in db_manager.db["products"].find({
+    skip_value = (page - 1) * limit
+    
+    cursor = db_manager.db["products"].find({
         "$expr": { "$lt": ["$stock", "$low_stock_threshold"] }
-    }):
+    }).skip(skip_value).limit(limit)
+    
+    async for product in cursor:
         product["id"] = str(product["_id"])
         del product["_id"]
         products.append(product)
 
+    # Cache the result with shorter TTL since stock changes frequently
+    await cache_manager.set(cache_key, products, CacheTTL.SHORT)
+    
     return products
 
 @router.get("/search",response_model=List[ProductResponse])
 async def search_products(
     q: str = Query(..., min_length=1, max_length=100, description="Search query"),
+    page: int = Query(1, ge=1, le=1000, description="Page number for pagination"),
+    limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
     user=Depends(get_current_user)
 ):
-    
     # Validate search query
     if len(q.strip()) < 1:
         raise HTTPException(
@@ -116,10 +145,19 @@ async def search_products(
     if not sanitized_q:
         return []
     
+    cache_key = product_cache_key(page=page, limit=limit, search=sanitized_q)
+    
+    # Try to get from cache first
+    cached_products = await cache_manager.get(cache_key)
+    if cached_products is not None:
+        return cached_products
+
     # Use sanitized regex pattern
     regex_pattern = injection_protection.sanitize_regex_pattern(sanitized_q)
+    
+    skip_value = (page - 1) * limit
 
-    cursor = db_manager.db["products"].find({"name":{"$regex":regex_pattern, "$options":"i"}}).limit(50 )
+    cursor = db_manager.db["products"].find({"name":{"$regex":regex_pattern, "$options":"i"}}).skip(skip_value).limit(limit)
 
     products = []
 
@@ -130,6 +168,9 @@ async def search_products(
     
     products.sort(key=lambda x: not x["name"].lower().startswith(q.lower()))
 
+    # Cache search results with medium TTL
+    await cache_manager.set(cache_key, products, CacheTTL.MEDIUM)
+    
     return products
 
 
@@ -138,13 +179,19 @@ async def get_product(
     product_id: str = Path(..., min_length=24, max_length=24, description="Product ID"),
     user=Depends(get_current_user)
 ):
-    
     # Validate ObjectId format and prevent injection
     if not injection_protection.validate_object_id(product_id):
         raise HTTPException(
             status_code=400,
             detail="Invalid product ID format"
         )
+
+    cache_key = product_cache_key(product_id=product_id)
+    
+    # Try to get from cache first
+    cached_product = await cache_manager.get(cache_key)
+    if cached_product is not None:
+        return cached_product
 
     try:
         product = await db_manager.db["products"].find_one({"_id": ObjectId(product_id)})
@@ -160,6 +207,9 @@ async def get_product(
     product["id"] = str(product["_id"])
     del product["_id"]
 
+    # Cache individual product with longer TTL
+    await cache_manager.set(cache_key, product, CacheTTL.LONG)
+    
     return product
 
 @router.put("/{product_id}", response_model=ProductResponse)
@@ -227,6 +277,12 @@ async def update_product(
     updated["id"] = str(updated["_id"])
     del updated["_id"]
 
+    # Invalidate all product-related caches
+    await cache_manager.delete(product_cache_key(product_id=product_id))
+    await cache_manager.delete_pattern("products:list:*")
+    await cache_manager.delete_pattern("products:search:*")
+    await cache_manager.delete_pattern("products:low-stock:*")
+
     return updated
 @router.delete("/{product_id}")
 @limiter.limit("20/minute")
@@ -256,6 +312,12 @@ async def delete_product(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    # Invalidate all product-related caches
+    await cache_manager.delete(product_cache_key(product_id=product_id))
+    await cache_manager.delete_pattern("products:list:*")
+    await cache_manager.delete_pattern("products:search:*")
+    await cache_manager.delete_pattern("products:low-stock:*")
+
     return {"message": "Product deleted"}
 
 @router.get("/barcode/{barcode}",response_model=ProductResponse)
@@ -275,7 +337,9 @@ async def get_product_by_barcode(
     
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    
     product["id"] = str(product["_id"])
+    del product["_id"]
     
     return product
 

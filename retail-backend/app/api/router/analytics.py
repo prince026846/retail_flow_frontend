@@ -1,8 +1,14 @@
+"""
+Complete optimized analytics router with proper caching and query optimization
+This replaces the current analytics.py with all aggregation calls properly cached
+"""
+
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, Request
 from app.db.mongodb import db_manager
 from app.api.router.dependency import get_current_user, require_employee, require_owner
 from app.core.rate_limit import limiter
+from app.core.optimized_aggregations import aggregation_optimizer, OptimizedPipelines
 from datetime import datetime, timezone, timedelta
 import re
 
@@ -15,9 +21,7 @@ async def total_revenue(
     request: Request,
     user=Depends(require_owner)
 ):
-    """Total all-time revenue."""
-    order_collection = db_manager.db["orders"]
-
+    """Total all-time revenue with caching."""
     pipeline = [
         {
             "$group": {
@@ -27,7 +31,12 @@ async def total_revenue(
         }
     ]
 
-    result = await order_collection.aggregate(pipeline).to_list(1)
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key="total_revenue",
+        cache_ttl=600  # 10 minutes for revenue data
+    )
 
     if result:
         return {"total_revenue": result[0]["total_revenue"]}
@@ -40,9 +49,22 @@ async def total_orders(
     limit: int = Query(1000, ge=1, le=10000, description="Maximum number of orders to count"),
     user=Depends(get_current_user)
 ):
+    """Total orders count with caching."""
     order_collection = db_manager.db["orders"]
-    count = await order_collection.count_documents({}, limit=limit)
-    return {"total_orders": count}
+    
+    # Use optimized aggregation for counting with caching
+    pipeline = [
+        {"$count": "total_orders"}
+    ]
+    
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key="total_orders",
+        cache_ttl=300  # 5 minutes
+    )
+    
+    return {"total_orders": result[0]["total_orders"] if result else 0}
 
 
 @router.get("/top-products")
@@ -50,47 +72,18 @@ async def top_products(
     limit: int = Query(5, ge=1, le=50, description="Number of top products to return"),
     user=Depends(get_current_user)
 ):
-    order_collection = db_manager.db["orders"]
-
-    pipeline = [
-        {"$unwind": "$items"},
-        {
-            "$group": {
-                "_id": "$items.name",
-                "total_sold": {"$sum": "$items.quantity"},
-                "total_revenue": {
-                    "$sum": {
-                        "$multiply": [
-                            {"$ifNull": ["$items.quantity", 0]},
-                            {"$ifNull": ["$items.price", 0]}
-                        ]
-                    }
-                }
-            }
-        },
-        {"$sort": {"total_sold": -1}},
-        {"$limit": limit},
-        {
-            "$lookup": {
-                "from": "products",
-                "localField": "_id",
-                "foreignField": "name",
-                "as": "product_info"
-            }
-        },
-        {
-            "$project": {
-                "name": "$_id",
-                "unitsSold": "$total_sold",
-                "revenue": "$total_revenue",
-                "category": {"$ifNull": [{"$arrayElemAt": ["$product_info.category", 0]}, "N/A"]},
-                "stock": {"$ifNull": [{"$arrayElemAt": ["$product_info.stock", 0]}, 0]},
-                "_id": 0
-            }
-        }
-    ]
-
-    result = await order_collection.aggregate(pipeline).to_list(limit)
+    """Top products with optimized aggregation and caching."""
+    
+    # Use pre-built optimized pipeline
+    pipeline = OptimizedPipelines.top_products_pipeline(limit=limit, days_back=365)
+    
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key=f"top_products_{limit}",
+        cache_ttl=300  # 5 minutes cache
+    )
+    
     return result
 
 
@@ -99,47 +92,23 @@ async def worst_products(
     limit: int = Query(5, ge=1, le=50, description="Number of worst products to return"),
     user=Depends(get_current_user)
 ):
-    order_collection = db_manager.db["orders"]
-
-    pipeline = [
-        {"$unwind": "$items"},
-        {
-            "$group": {
-                "_id": "$items.name",
-                "total_sold": {"$sum": "$items.quantity"},
-                "total_revenue": {
-                    "$sum": {
-                        "$multiply": [
-                            {"$ifNull": ["$items.quantity", 0]},
-                            {"$ifNull": ["$items.price", 0]}
-                        ]
-                    }
-                }
-            }
-        },
-        {"$sort": {"total_sold": 1}},
-        {"$limit": limit},
-        {
-            "$lookup": {
-                "from": "products",
-                "localField": "_id",
-                "foreignField": "name",
-                "as": "product_info"
-            }
-        },
-        {
-            "$project": {
-                "name": "$_id",
-                "unitsSold": "$total_sold",
-                "revenue": "$total_revenue",
-                "category": {"$ifNull": [{"$arrayElemAt": ["$product_info.category", 0]}, "N/A"]},
-                "stock": {"$ifNull": [{"$arrayElemAt": ["$product_info.stock", 0]}, 0]},
-                "_id": 0
-            }
-        }
-    ]
-
-    result = await order_collection.aggregate(pipeline).to_list(limit)
+    """Worst products with optimized aggregation and caching."""
+    
+    # Modified top products pipeline with ascending sort
+    pipeline = OptimizedPipelines.top_products_pipeline(limit=limit, days_back=365)
+    
+    # Change sort to ascending for worst products
+    for stage in pipeline:
+        if "$sort" in stage and "total_sold" in stage["$sort"]:
+            stage["$sort"]["total_sold"] = 1  # Ascending for worst products
+    
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key=f"worst_products_{limit}",
+        cache_ttl=300  # 5 minutes cache
+    )
+    
     return result
 
 
@@ -148,9 +117,8 @@ async def sales_summary(
     days: int = Query(7, ge=1, le=365, description="Number of days to look back for weekly summary"),
     user=Depends(get_current_user)
 ):
-    """Returns items sold today and this week."""
-    order_collection = db_manager.db["orders"]
-
+    """Returns items sold today and this week with caching."""
+    
     now = datetime.now(timezone.utc)
     today_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
     week_start = today_start - timedelta(days=min(days, today_start.weekday()))
@@ -182,7 +150,12 @@ async def sales_summary(
         }
     ]
 
-    result = await order_collection.aggregate(pipeline).to_list(1)
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key=f"sales_summary_{days}",
+        cache_ttl=180  # 3 minutes for current data
+    )
 
     if result:
         return {
@@ -202,8 +175,8 @@ async def low_stock_products(
     limit: int = Query(50, ge=1, le=500, description="Maximum number of products to return"),
     user=Depends(get_current_user)
 ):
-    product_collection = db_manager.db["products"]
-
+    """Low stock products with caching."""
+    
     pipeline = [
         {
             "$match": {"stock": {"$lt": threshold}}
@@ -218,9 +191,14 @@ async def low_stock_products(
         }
     ]
 
-    cursor = product_collection.aggregate(pipeline)
-    products = await cursor.to_list(length=limit)
-    return products
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="products",
+        pipeline=pipeline,
+        cache_key=f"low_stock_{threshold}_{limit}",
+        cache_ttl=600  # 10 minutes
+    )
+    
+    return result
 
 
 @router.get("/monthly-revenue")
@@ -228,8 +206,7 @@ async def monthly_revenue(
     year: int = Query(None, ge=2020, le=2030, description="Year to filter revenue data"),
     user=Depends(get_current_user)
 ):
-    """Returns array of 12 revenue values indexed by month (0=Jan)."""
-    order_collection = db_manager.db["orders"]
+    """Returns array of 12 revenue values indexed by month (0=Jan) with caching."""
     
     # Default to current year if not provided
     if year is None:
@@ -265,7 +242,12 @@ async def monthly_revenue(
         {"$sort": {"_id": 1}}
     ]
 
-    result = await order_collection.aggregate(pipeline).to_list(length=100)
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key=f"monthly_revenue_{year}",
+        cache_ttl=3600  # 1 hour for historical data
+    )
 
     months_revenue = [0] * 12
 
@@ -282,50 +264,28 @@ async def category_sales(
     limit: int = Query(20, ge=1, le=100, description="Maximum number of categories to return"),
     user=Depends(get_current_user)
 ):
-    """
-    FIX: Was grouping by $category and summing $total — neither exists on orders.
-    Now unwinds items, looks up product for category, and multiplies qty * price.
-    """
-    order_collection = db_manager.db["orders"]
-
-    pipeline = [
-        {"$unwind": "$items"},
-        {
-            "$lookup": {
-                "from": "products",
-                "localField": "items.name",
-                "foreignField": "name",
-                "as": "product_info"
-            }
-        },
-        {
-            "$group": {
-                "_id": {
-                    "$ifNull": [
-                        {"$arrayElemAt": ["$product_info.category", 0]},
-                        "Uncategorized"
-                    ]
-                },
-                "revenue": {
-                    "$sum": {
-                        "$multiply": [
-                            {"$ifNull": ["$items.quantity", 0]},
-                            {"$ifNull": ["$items.price", 0]}
-                        ]
-                    }
-                }
-            }
-        },
-        {"$sort": {"revenue": -1}},
-        {"$limit": limit}
-    ]
-
-    result = await order_collection.aggregate(pipeline).to_list(length=None)
-
-    labels = [r["_id"] for r in result]
+    """Category sales with optimized aggregation and caching."""
+    
+    # Use pre-built optimized pipeline
+    pipeline = OptimizedPipelines.category_sales_pipeline(limit=limit, days_back=365)
+    
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key=f"category_sales_{limit}",
+        cache_ttl=300  # 5 minutes cache
+    )
+    
+    # Transform result for compatibility
+    labels = [r["category"] for r in result]
     values = [r["revenue"] for r in result]
+    items_sold = [r.get("itemsSold", 0) for r in result]
 
-    return {"labels": labels, "values": values}
+    return {
+        "labels": labels, 
+        "values": values,
+        "itemsSold": items_sold
+    }
 
 
 @router.get("/items-sold")
@@ -333,9 +293,8 @@ async def items_sold(
     months: int = Query(1, ge=1, le=24, description="Number of months to look back"),
     user=Depends(get_current_user)
 ):
-    """Items sold in the current calendar month."""
-    sales_collection = db_manager.db["orders"]
-
+    """Items sold in the current calendar months with caching."""
+    
     now = datetime.now(timezone.utc)
     start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     
@@ -358,7 +317,13 @@ async def items_sold(
         }
     ]
 
-    result = await sales_collection.aggregate(pipeline).to_list(1)
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key=f"items_sold_{months}",
+        cache_ttl=300
+    )
+    
     return {"itemsSold": result[0]["itemsSold"] if result else 0}
 
 
@@ -366,12 +331,8 @@ async def items_sold(
 async def this_month(
     user=Depends(get_current_user)
 ):
-    """
-    FIX: Was incomplete/missing. Returns this month's revenue and items sold.
-    This is the single endpoint the dashboard KPI cards should use.
-    """
-    order_collection = db_manager.db["orders"]
-
+    """This month's revenue and items sold with caching."""
+    
     now = datetime.now(timezone.utc)
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
 
@@ -391,7 +352,12 @@ async def this_month(
         }
     ]
 
-    result = await order_collection.aggregate(pipeline).to_list(1)
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key="this_month_stats",
+        cache_ttl=180  # 3 minutes for current month data
+    )
 
     if result:
         return {
@@ -404,6 +370,7 @@ async def this_month(
         "items_sold": 0
     }
 
+
 @router.get("/sales-by-employee")
 @limiter.limit("50/minute")
 async def sales_by_employee(
@@ -411,71 +378,20 @@ async def sales_by_employee(
     limit: int = Query(50, ge=1, le=200, description="Maximum number of employees to return"),
     user=Depends(require_owner)
 ):
-    order_collection = db_manager.db["orders"]
-    user_collection = db_manager.db["users"]
-    pipeline = [
-    # 1. Group BEFORE unwind to count orders correctly
-    {
-        "$group": {
-            "_id": "$user_id",
-            "total_revenue": {"$sum": "$total_price"},
-            "order_count": {"$sum": 1},           # count orders here before unwind
-            "all_items": {"$push": "$items"}       # collect all items arrays
-        }
-    },
-
-    # 2. Unwind the collected items arrays
-    {"$unwind": "$all_items"},
-    {"$unwind": "$all_items"},                     # double unwind needed: first unwraps outer array, second unwraps inner items
-
-    # 3. Now sum quantities correctly
-    {
-        "$group": {
-            "_id": "$_id",
-            "total_revenue": {"$first": "$total_revenue"},
-            "order_count": {"$first": "$order_count"},
-            "items_sold": {"$sum": "$all_items.quantity"}
-        }
-    },
-
-    # 4. Convert string user_id to ObjectId for lookup
-    {
-        "$addFields": {
-            "user_object_id": {"$toObjectId": "$_id"}
-        }
-    },
-
-    # 5. Join with users collection
-    {
-        "$lookup": {
-            "from": "users",
-            "localField": "user_object_id",
-            "foreignField": "_id",
-            "as": "user_info"
-        }
-    },
-
-    {"$unwind": "$user_info"},
-
-    # 6. Final output shape
-    {
-        "$project": {
-            "_id": 0,
-            "user_id": "$_id",
-            "username": "$user_info.username",
-            "email": "$user_info.email",
-            "total_revenue": 1,
-            "order_count": 1,
-            "items_sold": 1
-        }
-    },
-
-    {"$sort": {"total_revenue": -1}},
-    {"$limit": limit}
-]
-
-    result = await order_collection.aggregate(pipeline).to_list(limit)
+    """Sales by employee with optimized aggregation and caching."""
+    
+    # Use pre-built optimized pipeline
+    pipeline = OptimizedPipelines.employee_performance_pipeline(limit=limit, days_back=365)
+    
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key=f"sales_by_employee_{limit}",
+        cache_ttl=300  # 5 minutes cache
+    )
+    
     return result
+
 
 @router.get("/top-product")
 @limiter.limit("80/minute")
@@ -484,9 +400,9 @@ async def get_top_product(
     limit: int = Query(1, ge=1, le=10, description="Number of top products to return"),
     user=Depends(require_owner)
 ):
-    order_collection = db_manager.db["orders"]
-    product_collection = db_manager.db["products"]
-
+    """Top product with optimized aggregation and caching."""
+    
+    # Use optimized pipeline with product_id grouping
     pipeline = [
         {"$unwind": "$items"},
         { 
@@ -498,7 +414,7 @@ async def get_top_product(
                         "$multiply": ["$items.price","$items.quantity"]
                     }
                 },
-                "order_count": {"$sum": 1},           # count orders here before unwind
+                "order_count": {"$sum": 1},
             }
         },
         
@@ -516,7 +432,6 @@ async def get_top_product(
             }
         },
         {"$unwind": "$product_info"},
-
         {
             "$project": {
                 "_id": 0,
@@ -528,10 +443,17 @@ async def get_top_product(
                 "items_sold": 1
             }
         },
-
-        {"$sort": {"total_revenue": -1}}
+        {"$sort": {"total_revenue": -1}},
+        {"$limit": limit}
     ]
-    result = await order_collection.aggregate(pipeline).to_list(limit)
+    
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="orders",
+        pipeline=pipeline,
+        cache_key=f"top_product_{limit}",
+        cache_ttl=300
+    )
+    
     return result
 
 
@@ -543,14 +465,14 @@ async def unsold_products(
     limit: int = Query(100, ge=1, le=500, description="Maximum number of products to return"),
     user=Depends(require_owner)
 ):
-    product_collection = db_manager.db["products"]
-
+    """Unsold products with optimized aggregation and caching."""
+    
     days_ago = datetime.now(timezone.utc) - timedelta(days=days)
 
     pipeline = [
         {
             "$lookup":{
-                "from": "orders",
+                "from":"orders",
                 "let":{"product_id":{"$toString":"$_id"}},
                 "pipeline":[
                     {"$unwind":"$items"},
@@ -559,13 +481,13 @@ async def unsold_products(
                             "$expr": {
                                 "$and": [
                                     {"$eq":["$items.product_id","$$product_id"]},
-                                    {"gte":["$created_at",days_ago]}
+                                    {"$gte":["$created_at",days_ago]}
                                 ]
                             }
                         }
                     }
                 ],
-                "as": "recent_orders"
+                "as":"recent_orders"
             }
         },
 
@@ -583,70 +505,15 @@ async def unsold_products(
                 "price":1,
                 "stock":1,
                 "category":1,
-
             }
         }
     ]
 
-    result = await product_collection.aggregate(pipeline).to_list(limit)
+    result = await aggregation_optimizer.optimized_aggregate(
+        collection_name="products",
+        pipeline=pipeline,
+        cache_key=f"unsold_products_{days}_{limit}",
+        cache_ttl=600  # 10 minutes
+    )
+    
     return result
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # pipeline = [
-    #     {
-    #         "$match":{
-    #             "user_id" {"$user_id": ObjectId(user_id)}
-    #         }
-    #     },
-    #     {"$unwind": "$items"},
-    #             {
-    #         "$group": {
-    #             "user_id": ObjectId(user_id),
-    #             "total_revenue": {"$sum": "$total_price"},
-    #             "items_sold": {"$sum": {"$ifNull": ["$items.quantity", 0]}}
-    #         }
-    #     }
-    # ]
-
-#     pipeline = [
-#     {
-#         "$group": {
-#             "_id": "$user_id",               
-#             "total_revenue": {"$sum": "$total_price"}, 
-#             "order_count": {"$sum": 1},      
-#             "item_list": {"$push": "$items"},
-#             "items_sold": {"$sum": {"$ifNull": ["$items.quantity", 0]}},
-#         }
-#     },
-#     {
-#         "$sort": {"total_revenue": -1}        
-#     }
-# ]
-#     result = await order_collection.aggregate(pipeline).to_list(1)
-
-#     if result:
-#         return {
-#             "_id":result[0]["_id"],
-#             "total_revenue": result[0]["total_revenue"],
-#             "items_sold": result[0]["items_sold"]
-#         }
-
-#     return {
-#         "total_revenue": 0,
-#         "items_sold": 0
-#     }

@@ -81,7 +81,7 @@ class UserCreateValidation(BaseModel, BaseValidationMixin):
     username: str
     email: str
     password: str
-    role: Optional[str] = "employee"
+    role: str
     
     @validator('username')
     def validate_username(cls, v):

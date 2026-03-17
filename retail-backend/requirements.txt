@@ -11,3 +11,4 @@ motor
 pydantic-settings
 email-validator
 pydantic[email]
+redis

@@ -2,14 +2,14 @@
 Migration script to add password reset fields to existing users
 """
 import asyncio
-from app.database import users_collection
+from app.db.mongodb import db_manager
 from datetime import datetime, timezone
 
 async def add_password_reset_fields():
     """Add password reset fields to all existing users"""
     
     # Find all users that don't have password reset fields
-    users_without_reset_fields = await users_collection.find({
+    users_without_reset_fields = await db_manager.db["users"].find({
         "$or": [
             { "password_reset_token": { "$exists": False } },
             { "password_reset_expires": { "$exists": False } }
@@ -24,7 +24,7 @@ async def add_password_reset_fields():
     
     # Update each user to add the new fields
     for user in users_without_reset_fields:
-        await users_collection.update_one(
+        await db_manager.db["users"].update_one(
             {"_id": user["_id"]},
             {
                 "$set": {

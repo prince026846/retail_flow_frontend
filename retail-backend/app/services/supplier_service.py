@@ -25,12 +25,16 @@ async def create_supplier_service(supplier):
     supplier_dict["id"] = str(result.inserted_id)
     return supplier_dict
 
-async def get_supplier_service():
+async def get_supplier_service(page: int = 1, limit: int = 10):
     supplier_collection = db_manager.db["suppliers"]
+    
+    skip_value = (page - 1) * limit
 
     suppliers = []
+    
+    cursor = supplier_collection.find().skip(skip_value).limit(limit)
 
-    async for supplier in supplier_collection.find():
+    async for supplier in cursor:
         supplier["id"] = str(supplier.pop("_id"))
 
         suppliers.append(supplier)

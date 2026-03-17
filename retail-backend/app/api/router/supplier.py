@@ -5,6 +5,7 @@ from app.schemas.supplier_schema import CreateSupplier,SupplierResponse
 from app.api.router.dependency import get_current_user,require_employee,require_owner
 from app.services.supplier_service import create_supplier_service, get_supplier_service,update_supplier_service,delete_supplier_service
 from app.core.rate_limit import limiter
+from app.core.cache import cache_manager, supplier_cache_key, CacheTTL
 
 
 router = APIRouter(
@@ -44,13 +45,33 @@ async def create_supplier(
             detail="Invalid phone number format"
         )
 
-    return await create_supplier_service(supplier)
+    result = await create_supplier_service(supplier)
+    
+    # Invalidate supplier-related caches when new supplier is created
+    await cache_manager.delete_pattern("suppliers:list:*")
+    
+    return result
 
 
 @router.get("/",response_model=List[SupplierResponse])
-async def get_supplier(user=Depends(get_current_user)):
-
-    return await get_supplier_service()
+async def get_suppliers(
+    page: int = Query(1, ge=1, le=1000, description="Page number for pagination"),
+    limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    user=Depends(get_current_user)
+):
+    cache_key = supplier_cache_key(page=page, limit=limit)
+    
+    # Try to get from cache first
+    cached_suppliers = await cache_manager.get(cache_key)
+    if cached_suppliers is not None:
+        return cached_suppliers
+    
+    suppliers = await get_supplier_service(page, limit)
+    
+    # Cache with longer TTL as supplier data changes infrequently
+    await cache_manager.set(cache_key, suppliers, CacheTTL.LONG)
+    
+    return suppliers
 
 @router.put("/{supplier_id}",response_model=SupplierResponse)
 @limiter.limit("40/minute")
@@ -92,7 +113,13 @@ async def update_supplier(
             detail="Invalid phone number format"
         )
     
-    return await update_supplier_service(supplier_id, supplier)
+    result = await update_supplier_service(supplier_id, supplier)
+    
+    # Invalidate supplier-related caches
+    await cache_manager.delete(supplier_cache_key(supplier_id=supplier_id))
+    await cache_manager.delete_pattern("suppliers:list:*")
+    
+    return result
 
 @router.delete("/{supplier_id}")
 @limiter.limit("20/minute")
@@ -108,4 +135,10 @@ async def delete_supplier(
             detail="Invalid supplier ID format"
         )
     
-    return await delete_supplier_service(supplier_id)
+    result = await delete_supplier_service(supplier_id)
+    
+    # Invalidate supplier-related caches
+    await cache_manager.delete(supplier_cache_key(supplier_id=supplier_id))
+    await cache_manager.delete_pattern("suppliers:list:*")
+    
+    return result

@@ -13,7 +13,7 @@ const BASE_URL = "http://127.0.0.1:8000";
 // Helper — all authenticated API calls go through here.
 // Automatically attaches the token and redirects to /login on 401/403.
 const apiFetch = async (url, options = {}) => {
-  const token = localStorage.getItem("retailflow_token");
+  const token = sessionStorage.getItem("retailflow_token");
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -44,6 +44,13 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     const loadProducts = async () => {
+      // Only load products if user is authenticated
+      const token = sessionStorage.getItem("retailflow_token");
+      if (!token) {
+        console.log("No authentication token - skipping product load");
+        return;
+      }
+      
       try {
         const data = await getProducts();
         setProducts(data);

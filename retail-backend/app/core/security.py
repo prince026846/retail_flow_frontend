@@ -109,6 +109,9 @@ def is_account_locked(user: dict) -> bool:
     lockout_until = user["lockout_until"]
     if isinstance(lockout_until, str):
         lockout_until = datetime.fromisoformat(lockout_until.replace('Z', '+00:00'))
+        # Ensure timezone info is present
+        if lockout_until.tzinfo is None:
+            lockout_until = lockout_until.replace(tzinfo=timezone.utc)
     
     return lockout_until > datetime.now(timezone.utc)
 
@@ -120,6 +123,9 @@ def get_lockout_time_remaining(user: dict) -> int:
     lockout_until = user["lockout_until"]
     if isinstance(lockout_until, str):
         lockout_until = datetime.fromisoformat(lockout_until.replace('Z', '+00:00'))
+        # Ensure timezone info is present
+        if lockout_until.tzinfo is None:
+            lockout_until = lockout_until.replace(tzinfo=timezone.utc)
     
     remaining = lockout_until - datetime.now(timezone.utc)
     return max(0, int(remaining.total_seconds() / 60))

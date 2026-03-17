@@ -9,7 +9,8 @@ const Register = () => {
     username: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    role: 'employee'
   });
   const [errors, setErrors] = useState({});
   const [passwordValidation, setPasswordValidation] = useState(null);
@@ -37,6 +38,12 @@ const Register = () => {
     if (name === 'password' || name === 'confirmPassword') {
       if (errors.passwordMismatch) {
         setErrors(prev => ({ ...prev, passwordMismatch: '' }));
+      }
+    }
+    
+    if (name === 'role') {
+      if (errors.role) {
+        setErrors(prev => ({ ...prev, role: '' }));
       }
     }
   };
@@ -69,6 +76,10 @@ const Register = () => {
       newErrors.passwordMismatch = 'Passwords do not match';
     }
 
+    if (!formData.role) {
+      newErrors.role = 'Please select a role';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -87,7 +98,8 @@ const Register = () => {
       const result = await registerUser({
         username: formData.username.trim(),
         email: formData.email.trim(),
-        password: formData.password
+        password: formData.password,
+        role: formData.role
       });
 
       if (result.success) {
@@ -136,6 +148,24 @@ const Register = () => {
               />
               {errors.username && (
                 <p className="mt-1 text-sm text-red-600">{errors.username}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="role" className="label block mb-2">Role</label>
+              <select
+                id="role"
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                className={`input ${errors.role ? 'border-red-300 focus:border-red-500' : ''}`}
+              >
+                <option value="">Select a role</option>
+                <option value="employee">Employee</option>
+                <option value="owner">Owner</option>
+              </select>
+              {errors.role && (
+                <p className="mt-1 text-sm text-red-600">{errors.role}</p>
               )}
             </div>
 

@@ -102,6 +102,53 @@ class EmailService:
         except Exception as e:
             print(f"Failed to send password reset confirmation email: {e}")
             return False
+    
+    def send_email_verification(self, to_email: str, verification_token: str) -> bool:
+        """Send email verification email to user"""
+        try:
+            # Create verification link
+            verification_link = f"{self.frontend_url}/verify-email?token={verification_token}"
+            
+            # Create email message
+            msg = MIMEMultipart()
+            msg['From'] = self.from_email
+            msg['To'] = to_email
+            msg['Subject'] = "Verify Your Email - Retail Flow"
+            
+            # Email body
+            body = f"""
+            <html>
+            <body>
+                <h2>Welcome to Retail Flow!</h2>
+                <p>Hello,</p>
+                <p>Thank you for registering with Retail Flow. To complete your registration, please verify your email address.</p>
+                <p>Click the link below to verify your email:</p>
+                <p><a href="{verification_link}">Verify Email Address</a></p>
+                <p>Or copy and paste this link in your browser:</p>
+                <p>{verification_link}</p>
+                <p><strong>Note:</strong> This link will expire in 24 hours for security reasons.</p>
+                <p>If you didn't create an account with us, please ignore this email.</p>
+                <br>
+                <p>Best regards,<br>
+                The Retail Flow Team</p>
+            </body>
+            </html>
+            """
+            
+            msg.attach(MIMEText(body, 'html'))
+            
+            # Send email
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+            server.starttls()
+            server.login(self.smtp_username, self.smtp_password)
+            server.send_message(msg)
+            server.quit()
+            
+            return True
+            
+        except Exception as e:
+            print(f"Failed to send email verification: {e}")
+            return False
 
 # Global email service instance
 email_service = EmailService()

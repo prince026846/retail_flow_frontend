@@ -54,6 +54,13 @@ async def register(request: Request, user_in: UserCreate):
             detail="Username must be at least 3 characters long"
         )
     
+    # Validate role
+    if sanitized_user.get("role") not in ["admin", "owner", "employee"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid role. Must be one of: admin, owner, employee"
+        )
+    
     # Username should only contain alphanumeric characters and underscores
     if not sanitized_user["username"].replace('_', '').isalnum():
         raise HTTPException(
@@ -88,14 +95,61 @@ async def register(request: Request, user_in: UserCreate):
 
     result = await db_manager.db["users"].insert_one(user_dict)
 
+    # Send verification email (DISABLED FOR TESTING)
+    try:
+        print(f"🔍 EMAIL TEST: Would send verification to {user_dict['email']}")
+        # email_sent = email_service.send_email_verification(
+        #     user_dict["email"], 
+        #     user_dict["email_verification_token"]
+        # )
+        # if not email_sent:
+        #     print(f"Failed to send verification email to {user_dict['email']}")
+    except Exception as e:
+        print(f"Error sending verification email: {e}")
+
     return {
         "id": str(result.inserted_id),
         "username": user_dict["username"],
         "email": user_dict["email"],
-        "role": user_dict.get("role", "employee"),
+        "role": user_dict["role"],
         "message": "Registration successful. Please check your email for verification instructions.",
         "requires_email_verification": True
     }
+
+
+@router.get("/dev/verification-tokens")
+@limiter.limit("5/minute")
+async def get_verification_tokens(request: Request):
+    """Development endpoint to get verification tokens for manual testing"""
+    try:
+        from app.db.mongodb import db_manager
+        
+        users = await db_manager.db["users"].find({
+            "email_verification_token": {"$exists": True, "$ne": None},
+            "is_email_verified": False
+        }).to_list(length=10)
+        
+        tokens = []
+        for user in users:
+            tokens.append({
+                "email": user["email"],
+                "username": user["username"],
+                "token": user["email_verification_token"],
+                "expires": user.get("email_verification_expires"),
+                "verification_link": f"http://localhost:5173/verify-email?token={user['email_verification_token']}"
+            })
+        
+        return {
+            "message": "Development endpoint - verification tokens for testing",
+            "users": tokens,
+            "note": "Use these tokens for manual email verification testing"
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get verification tokens: {str(e)}"
+        )
 
 
 @router.post("/login")
@@ -444,6 +498,17 @@ async def resend_verification(request: Request, resend_data: ResendVerificationR
         }}
     )
     
+    # Send verification email
+    try:
+        email_sent = email_service.send_email_verification(
+            user["email"], 
+            new_token
+        )
+        if not email_sent:
+            print(f"Failed to resend verification email to {user['email']}")
+    except Exception as e:
+        print(f"Error resending verification email: {e}")
+    
     return {
         "message": "Verification email sent successfully. Please check your inbox.",
         "note": "For development purposes, your verification token is: " + new_token
@@ -491,11 +556,12 @@ async def request_password_reset(request: Request, reset_request: PasswordResetR
         }}
     )
     
-    # Send password reset email
+    # Send password reset email (DISABLED FOR TESTING)
     try:
-        email_sent = email_service.send_password_reset_email(sanitized_email, reset_token)
-        if not email_sent:
-            print(f"Failed to send password reset email to {sanitized_email}")
+        print(f"🔍 EMAIL TEST: Would send password reset to {sanitized_email}")
+        # email_sent = email_service.send_password_reset_email(sanitized_email, reset_token)
+        # if not email_sent:
+        #     print(f"Failed to send password reset email to {sanitized_email}")
     except Exception as e:
         print(f"Error sending password reset email: {e}")
     

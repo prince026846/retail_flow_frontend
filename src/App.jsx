@@ -1,15 +1,30 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import OwnerDashboard from './pages/OwnerDashboard';
-import EmployeeDashboard from './pages/EmployeeDashboard';
-import EmailVerification from './pages/EmailVerification';
-import ResendVerification from './pages/ResendVerification';
-import PasswordResetRequest from './pages/PasswordResetRequest';
-import PasswordReset from './pages/PasswordReset';
+import { lazyWithTracking } from './utils/performance';
+import OfflineStatus from './components/OfflineStatus';
+import InstallPrompt from './components/InstallPrompt';
+
+// Lazy loaded page components with performance tracking
+const Login = lazyWithTracking(() => import('./pages/Login'), 'login');
+const Register = lazyWithTracking(() => import('./pages/Register'), 'register');
+const OwnerDashboard = lazyWithTracking(() => import('./pages/OwnerDashboard'), 'owner-dashboard');
+const EmployeeDashboard = lazyWithTracking(() => import('./pages/EmployeeDashboard'), 'employee-dashboard');
+const EmailVerification = lazyWithTracking(() => import('./pages/EmailVerification'), 'email-verification');
+const ResendVerification = lazyWithTracking(() => import('./pages/ResendVerification'), 'resend-verification');
+const PasswordResetRequest = lazyWithTracking(() => import('./pages/PasswordResetRequest'), 'password-reset-request');
+const PasswordReset = lazyWithTracking(() => import('./pages/PasswordReset'), 'password-reset');
+
+// Loading component for lazy loaded routes
+const RouteLoader = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="text-center">
+      <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <p className="mt-4 text-gray-600">Loading...</p>
+    </div>
+  </div>
+);
 
 // Role validation component
 function RoleGuard({ children, requiredRole }) {
@@ -53,7 +68,9 @@ function AppRoutes() {
           isAuthenticated && user ? (
             <Navigate to={user.role === 'owner' ? '/owner' : '/employee'} replace />
           ) : (
-            <Login />
+            <Suspense fallback={<RouteLoader />}>
+              <Login />
+            </Suspense>
           )
         } 
       />
@@ -63,25 +80,57 @@ function AppRoutes() {
           isAuthenticated && user ? (
             <Navigate to={user.role === 'owner' ? '/owner' : '/employee'} replace />
           ) : (
-            <Register />
+            <Suspense fallback={<RouteLoader />}>
+              <Register />
+            </Suspense>
           )
         } 
       />
       
       {/* Email Verification Routes - Public */}
-      <Route path="/verify-email" element={<EmailVerification />} />
-      <Route path="/resend-verification" element={<ResendVerification />} />
+      <Route 
+        path="/verify-email" 
+        element={
+          <Suspense fallback={<RouteLoader />}>
+            <EmailVerification />
+          </Suspense>
+        } 
+      />
+      <Route 
+        path="/resend-verification" 
+        element={
+          <Suspense fallback={<RouteLoader />}>
+            <ResendVerification />
+          </Suspense>
+        } 
+      />
       
       {/* Password Reset Routes - Public */}
-      <Route path="/password-reset-request" element={<PasswordResetRequest />} />
-      <Route path="/reset-password" element={<PasswordReset />} />
+      <Route 
+        path="/password-reset-request" 
+        element={
+          <Suspense fallback={<RouteLoader />}>
+            <PasswordResetRequest />
+          </Suspense>
+        } 
+      />
+      <Route 
+        path="/reset-password" 
+        element={
+          <Suspense fallback={<RouteLoader />}>
+            <PasswordReset />
+          </Suspense>
+        } 
+      />
       
       {/* Protected Routes with role guards */}
       <Route 
         path="/owner" 
         element={
           <RoleGuard requiredRole="owner">
-            <OwnerDashboard />
+            <Suspense fallback={<RouteLoader />}>
+              <OwnerDashboard />
+            </Suspense>
           </RoleGuard>
         } 
       />
@@ -89,7 +138,9 @@ function AppRoutes() {
         path="/employee" 
         element={
           <RoleGuard requiredRole="employee">
-            <EmployeeDashboard />
+            <Suspense fallback={<RouteLoader />}>
+              <EmployeeDashboard />
+            </Suspense>
           </RoleGuard>
         } 
       />
@@ -117,6 +168,8 @@ function App() {
     <AuthProvider>
       <AppProvider>
         <Router>
+          <OfflineStatus />
+          <InstallPrompt />
           <AppRoutes />
         </Router>
       </AppProvider>

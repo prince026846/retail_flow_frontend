@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from datetime import datetime
+from datetime import datetime, timezone
 from app.db.mongodb import db_manager
 from uuid import uuid4
 
@@ -61,7 +61,7 @@ async def create_order_service(order,user:dict):
         "items": order_items,
         "total_price": total_price,
         "user_id": str(user["_id"]),
-        "created_at": datetime.utcnow()
+        "created_at": datetime.now(timezone.utc)
     }
 
     result = await order_collection.insert_one(order_data)
@@ -71,13 +71,17 @@ async def create_order_service(order,user:dict):
     return order_data
 
 
-async def get_orders_service():
+async def get_orders_service(page: int = 1, limit: int = 10):
 
     order_collection = db_manager.db["orders"]
+    
+    skip_value = (page - 1) * limit
 
     orders = []
+    
+    cursor = order_collection.find().sort("created_at", -1).skip(skip_value).limit(limit)
 
-    async for order in order_collection.find():
+    async for order in cursor:
 
         order["id"] = str(order["_id"])
         

@@ -1,11 +1,11 @@
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
 
 const getToken = () => {
-  return localStorage.getItem("retailflow_token")
+  return sessionStorage.getItem("retailflow_token")
 }
 
 const getRefreshToken = () => {
-  return localStorage.getItem("retailflow_refresh_token")
+  return sessionStorage.getItem("retailflow_refresh_token")
 }
 
 const isTokenExpired = (token) => {
@@ -48,12 +48,17 @@ const refreshAccessToken = async () => {
   }
 
   const data = await response.json()
-  localStorage.setItem("retailflow_token", data.access_token)
+  sessionStorage.setItem("retailflow_token", data.access_token)
   return data.access_token
 }
 
 const makeAuthenticatedRequest = async (url, options = {}) => {
   let token = getToken()
+  
+  // Don't try refresh if no token (login/register pages)
+  if (!token) {
+    throw new Error("No authentication token available")
+  }
   
   if (isTokenExpired(token)) {
     if (!isRefreshing) {
@@ -65,8 +70,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       } catch (error) {
         refreshSubscribers.forEach(callback => callback(null))
         refreshSubscribers = []
-        localStorage.removeItem("retailflow_token")
-        localStorage.removeItem("retailflow_refresh_token")
+        // Don't automatically clear tokens - let auth context handle it
         throw new Error("Authentication failed")
       } finally {
         isRefreshing = false
@@ -110,9 +114,9 @@ export const loginUser = async (email, password) => {
   console.log("LOGIN RESPONSE:", data)
 
   if (res.ok && data.access_token) {
-    localStorage.setItem("retailflow_token", data.access_token)
+    sessionStorage.setItem("retailflow_token", data.access_token)
     if (data.refresh_token) {
-      localStorage.setItem("retailflow_refresh_token", data.refresh_token)
+      sessionStorage.setItem("retailflow_refresh_token", data.refresh_token)
     }
     return { success: true, ...data }
   } else {
@@ -189,8 +193,8 @@ export async function getProducts() {
     return response.json();
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Redirect to login or handle auth failure
-      window.location.href = "/login"
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
     }
     throw error
   }
@@ -209,7 +213,8 @@ export const createProduct = async (product) => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      window.location.href = "/login"
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
     }
     throw error
   }
@@ -228,12 +233,49 @@ export const createOrder = async (order) => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      window.location.href = "/login"
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
     }
     throw error
   }
 }
 
+
+export const updateProduct = async (id, product) => {
+  try {
+    const res = await makeAuthenticatedRequest(`${API_BASE}/products/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(product)
+    })
+
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const deleteProduct = async (id) => {
+  try {
+    const res = await makeAuthenticatedRequest(`${API_BASE}/products/${id}`, {
+      method: "DELETE"
+    })
+
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
 
 export const getAnalytics = async () => {
   try {
@@ -241,7 +283,73 @@ export const getAnalytics = async () => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      window.location.href = "/login"
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const getThisMonthAnalytics = async () => {
+  try {
+    const res = await makeAuthenticatedRequest(`${API_BASE}/analytics/this-month`)
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const getWorstProducts = async () => {
+  try {
+    const res = await makeAuthenticatedRequest(`${API_BASE}/analytics/worst-products`)
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const getLowStockProducts = async () => {
+  try {
+    const res = await makeAuthenticatedRequest(`${API_BASE}/analytics/low-stock-products`)
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const getMonthlyRevenue = async () => {
+  try {
+    const res = await makeAuthenticatedRequest(`${API_BASE}/analytics/monthly-revenue`)
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const getCategorySales = async () => {
+  try {
+    const res = await makeAuthenticatedRequest(`${API_BASE}/analytics/category-sales`)
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
     }
     throw error
   }
@@ -253,7 +361,8 @@ export const getOrders = async () => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      window.location.href = "/login"
+      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
     }
     throw error
   }

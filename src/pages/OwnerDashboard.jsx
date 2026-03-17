@@ -1,13 +1,27 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import KPICard from "../components/KPICard";
 import DataTable from "../components/DataTable";
-import ChartCard from "../components/ChartCard";
-import LineChart from "../components/LineChart";
-import DoughnutChart from "../components/DoughnutChart";
 import ProductModal from "../components/ProductModal";
+import RealTimeNotification from "../components/RealTimeNotification";
+import WebSocketStatus from "../components/WebSocketStatus";
 import { useAppContext } from "../context/AppContext";
 import { formatCurrency, isLowStock } from "../utils/helpers";
+import { getProducts, createProduct, updateProduct, deleteProduct, getThisMonthAnalytics, getAnalytics, getWorstProducts, getLowStockProducts, getMonthlyRevenue, getCategorySales } from "../services/api";
+import { lazyWithTracking } from "../utils/performance";
+import websocketService from '../services/websocket';
+
+// Lazy loaded chart components with performance tracking
+const ChartCard = lazyWithTracking(() => import("../components/ChartCard"), 'chart-card');
+const LineChart = lazyWithTracking(() => import("../components/LineChart"), 'line-chart');
+const DoughnutChart = lazyWithTracking(() => import("../components/DoughnutChart"), 'doughnut-chart');
+
+// Loading component for charts
+const ChartLoader = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+  </div>
+);
 
 const BASE_URL = "http://127.0.0.1:8000";
 
@@ -28,26 +42,12 @@ const OwnerDashboard = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [modalMode, setModalMode] = useState("add");
-
-  const token = localStorage.getItem("retailflow_token");
-  const authHeader = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
-
-  // =============================
-  // LOAD PRODUCTS
-  // =============================
+  const [wsConnected, setWsConnected] = useState(false);
+  const [notification, setNotification] = useState({ message: '', type: 'info' });
 
   const loadProducts = async () => {
     try {
-      const res = await fetch(`${BASE_URL}/products/`, { headers: authHeader });
-      if (res.status === 401 || res.status === 403) {
-        localStorage.removeItem("retailflow_token");
-        window.location.href = "/login";
-        return;
-      }
-      const data = await res.json();
+      const data = await getProducts();
       setProducts(data);
     } catch (err) {
       console.error("Products fetch error:", err);
@@ -61,30 +61,23 @@ const OwnerDashboard = () => {
   const loadAnalytics = async () => {
     try {
       const [
-        thisMonthRes,
-        bestRes,
-        worstRes,
-        lowStockRes,
-        monthlyRevenueRes,
-        categoryRes,
+        thisMonthData,
+        bestData,
+        worstData,
+        lowStockData,
+        revenueData,
+        categoryData,
       ] = await Promise.all([
-        fetch(`${BASE_URL}/analytics/this-month`, { headers: authHeader }),
-        fetch(`${BASE_URL}/analytics/top-products`, { headers: authHeader }),
-        fetch(`${BASE_URL}/analytics/worst-products`, { headers: authHeader }),
-        fetch(`${BASE_URL}/analytics/low-stock-products`, { headers: authHeader }),
-        fetch(`${BASE_URL}/analytics/monthly-revenue`, { headers: authHeader }),
-        fetch(`${BASE_URL}/analytics/category-sales`, { headers: authHeader }),
+        getThisMonthAnalytics(),
+        getAnalytics(),
+        getWorstProducts(),
+        getLowStockProducts(),
+        getMonthlyRevenue(),
+        getCategorySales(),
       ]);
 
-      const thisMonth = await thisMonthRes.json();
-      const bestData = await bestRes.json();
-      const worstData = await worstRes.json();
-      const lowStockData = await lowStockRes.json();
-      const revenueData = await monthlyRevenueRes.json();
-      const categoryData = await categoryRes.json();
-
-      setRevenue(thisMonth.total_revenue ?? 0);
-      setItemsSold(thisMonth.items_sold ?? 0);
+      setRevenue(thisMonthData.total_revenue ?? 0);
+      setItemsSold(thisMonthData.items_sold ?? 0);
 
       setBestSellers(
         bestData.map((item, i) => ({
@@ -133,6 +126,109 @@ const OwnerDashboard = () => {
     loadAnalytics();
   }, []);
 
+  // WebSocket connection effect
+  useEffect(() => {
+    const token = sessionStorage.getItem("retailflow_token");
+    
+    console.log('Owner Dashboard WebSocket effect running, token exists:', !!token);
+    
+    if (token) {
+      // Connect to WebSocket
+      websocketService.connect(token)
+        .then(() => {
+          console.log('Owner Dashboard WebSocket connected successfully');
+          setWsConnected(true);
+        })
+        .catch((error) => {
+          console.error('Owner Dashboard failed to connect WebSocket:', error);
+          setWsConnected(false);
+          // Fallback: set up periodic polling if WebSocket fails
+          const pollInterval = setInterval(() => {
+            console.log('Owner Dashboard polling analytics data as WebSocket fallback');
+            loadAnalytics();
+          }, 30000); // Poll every 30 seconds
+          
+          return () => clearInterval(pollInterval);
+        });
+
+      // Set up event listeners
+      const handleSalesUpdate = (data) => {
+        console.log('Owner Dashboard received comprehensive sales update:', data);
+        
+        // Show notification
+        setNotification({
+          message: `Sales data updated! Revenue: ₹${data.this_month_revenue?.toFixed(2) || '0'}, Items sold: ${data.this_month_items_sold || '0'}`,
+          type: 'success'
+        });
+        
+        // Update basic metrics if available
+        if (data.this_month_revenue !== undefined) {
+          setRevenue(data.this_month_revenue);
+        }
+        if (data.this_month_items_sold !== undefined) {
+          setItemsSold(data.this_month_items_sold);
+        }
+        
+        // Update chart data if available
+        if (data.monthly_revenue && Array.isArray(data.monthly_revenue)) {
+          setMonthlyRevenue(data.monthly_revenue);
+        }
+        
+        if (data.category_sales) {
+          setCategorySales({
+            labels: data.category_sales.labels || [],
+            values: data.category_sales.values || [],
+          });
+        }
+        
+        // Refresh all analytics to ensure consistency
+        loadAnalytics();
+      };
+
+      const handleOrderCreated = (data) => {
+        console.log('Owner Dashboard received order created notification:', data);
+        
+        // Show notification
+        setNotification({
+          message: `New order created! ₹${data.total_price?.toFixed(2) || '0'} - ${data.items_count || 0} items`,
+          type: 'success'
+        });
+        
+        // Refresh all analytics when new order is created
+        loadAnalytics();
+      };
+
+      websocketService.on('sales_update', handleSalesUpdate);
+      websocketService.on('order_created', handleOrderCreated);
+
+      // Cleanup on unmount
+      return () => {
+        console.log('Owner Dashboard cleaning up WebSocket connection');
+        websocketService.off('sales_update', handleSalesUpdate);
+        websocketService.off('order_created', handleOrderCreated);
+        websocketService.disconnect();
+        setWsConnected(false);
+      };
+    } else {
+      console.log('Owner Dashboard no token found, WebSocket not connecting');
+    }
+  }, [])
+
+  // Listen for custom KPI update events from BillingCart (for immediate updates)
+  useEffect(() => {
+    const handleKpiUpdate = (event) => {
+      console.log('Owner Dashboard received KPI update event:', event.detail);
+      // Refresh analytics to get the latest data
+      loadAnalytics();
+    };
+
+    window.addEventListener('kpiUpdate', handleKpiUpdate);
+    
+    return () => {
+      window.removeEventListener('kpiUpdate', handleKpiUpdate);
+    };
+  }, [])
+
   // =============================
   // INVENTORY HEALTH
   // =============================
@@ -160,43 +256,17 @@ const OwnerDashboard = () => {
   };
 
   const handleSaveProduct = async (formData) => {
-    // FIX: ProductModal already builds the correct ProductCreate payload:
-    // { name, price (float), stock (int), category, barcode, low_stock_threshold }
-    // Do NOT reconstruct it here — just pass formData straight to the API.
     console.log("Sending product:", formData);
 
     try {
       if (modalMode === "add") {
-        const res = await fetch(`${BASE_URL}/products/`, {
-          method: "POST",
-          headers: authHeader,
-          body: JSON.stringify(formData),   // ← formData is already the correct shape
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          console.error("Add product failed:", err);
-          alert(`Error: ${err.detail || "Failed to add product"}`);
-          return;
-        }
-
+        await createProduct(formData);
       } else {
-        const res = await fetch(`${BASE_URL}/products/${editingProduct.id}`, {
-          method: "PUT",
-          headers: authHeader,
-          body: JSON.stringify(formData),   // ← same here
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          console.error("Update product failed:", err);
-          alert(`Error: ${err.detail || "Failed to update product"}`);
-          return;
-        }
+        await updateProduct(editingProduct.id, formData);
       }
 
       setIsModalOpen(false);
-      loadProducts();  // refresh the table
+      loadProducts();  // refresh table
 
     } catch (err) {
       console.error("Save product error:", err);
@@ -207,18 +277,7 @@ const OwnerDashboard = () => {
     if (!window.confirm("Delete this product?")) return;
 
     try {
-      const res = await fetch(`${BASE_URL}/products/${id}`, {
-        method: "DELETE",
-        headers: authHeader,
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        console.error("Delete failed:", err);
-        alert(`Error: ${err.detail || "Failed to delete product"}`);
-        return;
-      }
-
+      await deleteProduct(id);
       loadProducts();
     } catch (err) {
       console.error("Delete error:", err);
@@ -281,26 +340,36 @@ const OwnerDashboard = () => {
 
   return (
     <DashboardLayout role="owner" pageTitle="Owner Dashboard">
+      
+      {/* Real-time Notification */}
+      <RealTimeNotification 
+        message={notification.message} 
+        type={notification.type} 
+      />
 
       {/* KPI */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <KPICard title="This Month Revenue" value={revenue} icon="💰" prefix="₹" />
-        <KPICard title="Items Sold" value={itemsSold} icon="📦" />
-        <KPICard title="Low Stock Products" value={lowStockItems.length} icon="⚠️" />
-        <KPICard title="Inventory Health" value={inventoryHealth} suffix="%" icon="📊" />
+        <KPICard title="This Month Revenue" value={revenue} icon="💰" prefix="₹" subtitle={wsConnected ? "🟢 Live" : "🔴 Offline"} />
+        <KPICard title="Items Sold" value={itemsSold} icon="📦" subtitle={wsConnected ? "🟢 Live" : "🔴 Offline"} />
+        <KPICard title="Low Stock Products" value={lowStockItems.length} icon="⚠️" subtitle={wsConnected ? "🟢 Live" : "🔴 Offline"} />
+        <KPICard title="Inventory Health" value={inventoryHealth} suffix="%" icon="📊" subtitle={wsConnected ? "🟢 Live" : "🔴 Offline"} />
       </div>
 
       {/* CHARTS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-        <ChartCard title="Monthly Revenue">
-          <LineChart
-            data={monthlyRevenue}
-            labels={["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]}
-          />
-        </ChartCard>
-        <ChartCard title="Category Sales">
-          <DoughnutChart data={categorySales.values} labels={categorySales.labels} />
-        </ChartCard>
+        <Suspense fallback={<ChartLoader />}>
+          <ChartCard title="Monthly Revenue">
+            <LineChart
+              data={monthlyRevenue}
+              labels={["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]}
+            />
+          </ChartCard>
+        </Suspense>
+        <Suspense fallback={<ChartLoader />}>
+          <ChartCard title="Category Sales">
+            <DoughnutChart data={categorySales.values} labels={categorySales.labels} />
+          </ChartCard>
+        </Suspense>
       </div>
 
       {/* INVENTORY */}
@@ -328,6 +397,9 @@ const OwnerDashboard = () => {
         product={editingProduct}
         mode={modalMode}
       />
+
+      {/* WebSocket Status Indicator */}
+      <WebSocketStatus connected={wsConnected} userRole="Owner" />
 
     </DashboardLayout>
   );
