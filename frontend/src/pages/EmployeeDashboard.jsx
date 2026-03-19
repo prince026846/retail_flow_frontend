@@ -11,6 +11,9 @@ import { Html5Qrcode } from "html5-qrcode";
 import { lazyWithTracking } from "../utils/performance";
 import websocketService from '../services/websocket';
 
+// Import API_BASE for environment variable
+const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
 // Lazy loaded billing component with performance tracking
 const BillingCart = lazyWithTracking(() => import('../components/BillingCart'), 'billing-cart');
 
@@ -116,13 +119,13 @@ const loadAnalytics = async () => {
 
     const token = sessionStorage.getItem("retailflow_token")
 
-    const bestRes = await fetch("http://127.0.0.1:8000/analytics/top-products", {
+    const bestRes = await fetch(`${API_BASE}/analytics/top-products`, {
       headers: {
         Authorization: `Bearer ${token}`
       }
     })
 
-    const worstRes = await fetch("http://127.0.0.1:8000/analytics/worst-products", {
+    const worstRes = await fetch(`${API_BASE}/analytics/worst-products`, {
       headers: {
         Authorization: `Bearer ${token}`
       }
@@ -219,7 +222,7 @@ const loadKPIs = async () => {
 
     const token = sessionStorage.getItem("retailflow_token")
 
-    const res = await fetch("http://127.0.0.1:8000/analytics/sales-summary", {
+    const res = await fetch(`${API_BASE}/analytics/sales-summary`, {
       headers: { Authorization: `Bearer ${token}` }
     })
 
@@ -239,7 +242,7 @@ const loadLowStock = async () => {
 
     const token = sessionStorage.getItem("retailflow_token")
 
-    const res = await fetch("http://127.0.0.1:8000/analytics/low-stock-products", {
+    const res = await fetch(`${API_BASE}/analytics/low-stock-products`, {
       headers: { Authorization: `Bearer ${token}` }
     })
 
