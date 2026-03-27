@@ -4,10 +4,13 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
   const [formData, setFormData] = useState({
     name: '',
     price: '',
+    cost_price: '',
     stock: '',
-    category: '',
+    category: 'Electronics',
     barcode: '',
-    low_stock_threshold: ''
+    low_stock_threshold: '10',
+    supplier: 'Nexus Global Logistics',
+    image: null
   });
   const [errors, setErrors] = useState({});
 
@@ -16,16 +19,41 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
       setFormData({
         name: product.name || '',
         price: product.price ?? '',
-        stock: product.stock ?? '',           // FIX: was `quantity` — schema uses `stock`
-        category: product.category || '',
+        cost_price: product.cost_price ?? '',
+        stock: product.stock ?? '',
+        category: product.category || 'Electronics',
         barcode: product.barcode || '',
-        low_stock_threshold: product.low_stock_threshold ?? ''
+        low_stock_threshold: product.low_stock_threshold ?? '10',
+        supplier: product.supplier || 'Nexus Global Logistics',
+        image: product.image || null
       });
     } else {
-      setFormData({ name: '', price: '', stock: '', category: '', barcode: '', low_stock_threshold: '' });
+      setFormData({ 
+        name: '', 
+        price: '', 
+        cost_price: '',
+        stock: '', 
+        category: 'Electronics', 
+        barcode: '', 
+        low_stock_threshold: '10',
+        supplier: 'Nexus Global Logistics',
+        image: null
+      });
     }
     setErrors({});
   }, [product, isOpen]);
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setErrors(prev => ({ ...prev, image: 'File size must be less than 5MB' }));
+        return;
+      }
+      setFormData(prev => ({ ...prev, image: file }));
+      if (errors.image) setErrors(prev => ({ ...prev, image: '' }));
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -41,6 +69,9 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
 
     if (formData.price === '' || isNaN(formData.price) || Number(formData.price) < 0)
       newErrors.price = 'Price must be 0 or greater';
+
+    if (formData.cost_price === '' || isNaN(formData.cost_price) || Number(formData.cost_price) < 0)
+      newErrors.cost_price = 'Cost price must be 0 or greater';
 
     if (formData.stock === '' || isNaN(formData.stock) || Number(formData.stock) < 0)
       newErrors.stock = 'Stock must be 0 or greater';
@@ -68,13 +99,15 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
 
     const parsedStock = parseInt(formData.stock, 10);
     const parsedPrice = parseFloat(formData.price);
+    const parsedCostPrice = parseFloat(formData.cost_price);
 
     // Hard guard — never let NaN reach the server
-    if (isNaN(parsedStock) || isNaN(parsedPrice)) {
+    if (isNaN(parsedStock) || isNaN(parsedPrice) || isNaN(parsedCostPrice)) {
       setErrors(prev => ({
         ...prev,
         ...(isNaN(parsedStock) && { stock: 'Stock is required' }),
         ...(isNaN(parsedPrice) && { price: 'Price is required' }),
+        ...(isNaN(parsedCostPrice) && { cost_price: 'Cost price is required' }),
       }));
       return;
     }
@@ -83,12 +116,15 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
     const payload = {
       name: formData.name.trim(),                   // str  (required)
       price: parsedPrice,                           // float (required)
+      cost_price: parsedCostPrice,                  // float (optional)
       stock: parsedStock,                           // int  (required)
       category: formData.category.trim() || null,   // Optional[str]
       barcode: formData.barcode.trim() || null,     // Optional[str]
       low_stock_threshold: formData.low_stock_threshold !== ''
         ? parseInt(formData.low_stock_threshold, 10)
-        : null                                      // Optional[int]
+        : null,                                     // Optional[int]
+      supplier: formData.supplier.trim() || null,  // Optional[str]
+      image: formData.image                         // Optional[File]
     };
 
     onSave(payload);
@@ -102,64 +138,211 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
       <div className="flex min-h-screen items-center justify-center p-4">
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 transition-opacity" onClick={onClose} />
 
-        <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-          <h3 className="text-xl font-semibold text-gray-900 mb-6">
-            {mode === 'add' ? 'Add New Product' : 'Edit Product'}
-          </h3>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-
-            {/* Name */}
+        <div className="relative bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-700">
+          <div className="flex justify-between items-center mb-6">
             <div>
-              <label htmlFor="name" className="label block mb-2">Product Name *</label>
-              <input type="text" id="name" name="name" value={formData.name} onChange={handleChange}
-                className={`input ${errors.name ? 'border-danger-500' : ''}`} placeholder="Enter product name" />
-              {errors.name && <p className="text-danger-600 text-sm mt-1">{errors.name}</p>}
+              <h3 className="text-xl font-semibold text-gray-100">
+                {mode === 'add' ? 'Add New Product' : 'Edit Product'}
+              </h3>
+              <p className="text-sm text-gray-400 mt-1">Register a new item to the Ethereal Ledger ecosystem.</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Product Image Upload */}
+            <div>
+              <label htmlFor="productImage" className="block text-sm font-medium text-gray-300 mb-2">PRODUCT IMAGE</label>
+              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-md hover:border-gray-500 transition-colors">
+                <div className="space-y-1 text-center">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <div className="flex text-sm text-gray-400">
+                    <label htmlFor="file-upload" className="relative cursor-pointer bg-gray-800 rounded-md font-medium text-blue-400 hover:text-blue-300 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                      <span>Drop image here or browse</span>
+                      <input id="file-upload" name="file-upload" type="file" className="sr-only" accept="image/*" onChange={handleImageUpload} />
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500">Supports JPG, PNG up to 5MB</p>
+                  {formData.image && (
+                    <div className="mt-2 text-sm text-green-400">
+                      {formData.image.name}
+                    </div>
+                  )}
+                  {errors.image && <p className="text-red-400 text-sm mt-1">{errors.image}</p>}
+                </div>
+              </div>
             </div>
 
-            {/* Price */}
-            <div>
-              <label htmlFor="price" className="label block mb-2">Price (₹) *</label>
-              <input type="number" id="price" name="price" value={formData.price} onChange={handleChange}
-                className={`input ${errors.price ? 'border-danger-500' : ''}`} placeholder="0.00" step="0.01" min="0" />
-              {errors.price && <p className="text-danger-600 text-sm mt-1">{errors.price}</p>}
+            {/* Product Name and Category - Horizontal */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">PRODUCT NAME</label>
+                <input 
+                  type="text" 
+                  id="name" 
+                  name="name" 
+                  value={formData.name} 
+                  onChange={handleChange}
+                  className={`w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.name ? 'border-red-500' : ''}`}
+                  placeholder="e.g. Luminary Smart Watch" 
+                />
+                {errors.name && <p className="text-red-400 text-sm mt-1">{errors.name}</p>}
+              </div>
+
+              <div>
+                <label htmlFor="category" className="block text-sm font-medium text-gray-300 mb-2">CATEGORY</label>
+                <select 
+                  id="category" 
+                  name="category" 
+                  value={formData.category} 
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="Electronics">Electronics</option>
+                  <option value="Clothing">Clothing</option>
+                  <option value="Food">Food</option>
+                  <option value="Books">Books</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
             </div>
 
-            {/* Stock */}
-            <div>
-              <label htmlFor="stock" className="label block mb-2">Stock *</label>
-              <input type="number" id="stock" name="stock" value={formData.stock} onChange={handleChange}
-                className={`input ${errors.stock ? 'border-danger-500' : ''}`} placeholder="0" min="0" step="1" />
-              {errors.stock && <p className="text-danger-600 text-sm mt-1">{errors.stock}</p>}
+            {/* Barcode and Supplier - Horizontal */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="barcode" className="block text-sm font-medium text-gray-300 mb-2">BARCODE ID</label>
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    id="barcode" 
+                    name="barcode" 
+                    value={formData.barcode} 
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pl-10"
+                    placeholder="UPC-A / EAN-13" 
+                  />
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="supplier" className="block text-sm font-medium text-gray-300 mb-2">SUPPLIER</label>
+                <select 
+                  id="supplier" 
+                  name="supplier" 
+                  value={formData.supplier} 
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="Nexus Global Logistics">Nexus Global Logistics</option>
+                  <option value="TechSupply Co">TechSupply Co</option>
+                  <option value="Global Distributors">Global Distributors</option>
+                  <option value="Local Suppliers">Local Suppliers</option>
+                </select>
+              </div>
             </div>
 
-            {/* Category */}
-            <div>
-              <label htmlFor="category" className="label block mb-2">Category</label>
-              <input type="text" id="category" name="category" value={formData.category} onChange={handleChange}
-                className="input" placeholder="e.g., Electronics, Clothing" />
+            {/* Cost Price and Selling Price - Horizontal */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="cost_price" className="block text-sm font-medium text-gray-300 mb-2">COST PRICE</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">$</span>
+                  <input 
+                    type="number" 
+                    id="cost_price" 
+                    name="cost_price" 
+                    value={formData.cost_price} 
+                    onChange={handleChange}
+                    className={`w-full pl-8 pr-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.cost_price ? 'border-red-500' : ''}`}
+                    placeholder="0.00" 
+                    step="0.01" 
+                    min="0" 
+                  />
+                </div>
+                {errors.cost_price && <p className="text-red-400 text-sm mt-1">{errors.cost_price}</p>}
+              </div>
+
+              <div>
+                <label htmlFor="price" className="block text-sm font-medium text-gray-300 mb-2">SELLING PRICE</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">$</span>
+                  <input 
+                    type="number" 
+                    id="price" 
+                    name="price" 
+                    value={formData.price} 
+                    onChange={handleChange}
+                    className={`w-full pl-8 pr-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.price ? 'border-red-500' : ''}`}
+                    placeholder="0.00" 
+                    step="0.01" 
+                    min="0" 
+                  />
+                </div>
+                {errors.price && <p className="text-red-400 text-sm mt-1">{errors.price}</p>}
+              </div>
             </div>
 
-            {/* Barcode */}
-            <div>
-              <label htmlFor="barcode" className="label block mb-2">Barcode</label>
-              <input type="text" id="barcode" name="barcode" value={formData.barcode} onChange={handleChange}
-                className="input" placeholder="e.g., 8901234567890" />
+            {/* Stock Quantity and Reorder Level - Horizontal */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="stock" className="block text-sm font-medium text-gray-300 mb-2">STOCK QUANTITY</label>
+                <input 
+                  type="number" 
+                  id="stock" 
+                  name="stock" 
+                  value={formData.stock} 
+                  onChange={handleChange}
+                  className={`w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.stock ? 'border-red-500' : ''}`}
+                  placeholder="0" 
+                  min="0" 
+                  step="1" 
+                />
+                {errors.stock && <p className="text-red-400 text-sm mt-1">{errors.stock}</p>}
+              </div>
+
+              <div>
+                <label htmlFor="low_stock_threshold" className="block text-sm font-medium text-gray-300 mb-2">REORDER LEVEL</label>
+                <input 
+                  type="number" 
+                  id="low_stock_threshold" 
+                  name="low_stock_threshold"
+                  value={formData.low_stock_threshold} 
+                  onChange={handleChange}
+                  className={`w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.low_stock_threshold ? 'border-red-500' : ''}`}
+                  placeholder="10" 
+                  min="0" 
+                  step="1" 
+                />
+                {errors.low_stock_threshold && <p className="text-red-400 text-sm mt-1">{errors.low_stock_threshold}</p>}
+              </div>
             </div>
 
-            {/* Low Stock Threshold */}
-            <div>
-              <label htmlFor="low_stock_threshold" className="label block mb-2">Low Stock Threshold</label>
-              <input type="number" id="low_stock_threshold" name="low_stock_threshold"
-                value={formData.low_stock_threshold} onChange={handleChange}
-                className={`input ${errors.low_stock_threshold ? 'border-danger-500' : ''}`}
-                placeholder="e.g., 10" min="0" step="1" />
-              {errors.low_stock_threshold && <p className="text-danger-600 text-sm mt-1">{errors.low_stock_threshold}</p>}
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-4">
-              <button type="button" onClick={onClose} className="btn btn-secondary">Cancel</button>
-              <button type="submit" className="btn btn-primary">
+            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-700">
+              <button 
+                type="button" 
+                onClick={onClose} 
+                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-gray-100 font-medium rounded-lg transition-colors duration-200"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors duration-200"
+              >
                 {mode === 'add' ? 'Add Product' : 'Save Changes'}
               </button>
             </div>

@@ -50,7 +50,7 @@ const Login = () => {
 
     if (result.isLocked) {
       setIsAccountLocked(true)
-    } else if (result.error && result.error.includes("verify your email")) {
+    } else if (result.requiresVerification || (result.error && result.error.includes("verify your email"))) {
       setRequiresVerification(true)
     }
     setError(result.error || "Login failed")

@@ -31,7 +31,8 @@ export function AuthProvider({ children }) {
         }
 
         setUser({
-          email: payload.sub,  // Use 'sub' consistently
+          _id: payload.sub,  // Extract MongoDB ObjectId from sub field
+          email: payload.sub,  // Use 'sub' consistently for email/username
           role: payload.role
         })
         setIsAuthenticated(true)
@@ -54,40 +55,39 @@ export function AuthProvider({ children }) {
     try {
       const result = await loginUser(email, password)
 
-      if (result.success) {
-        // Clear any existing token first
-        sessionStorage.removeItem(TOKEN_KEY)
-        
-        // Store token in sessionStorage (tab-specific)
-        sessionStorage.setItem(TOKEN_KEY, result.access_token)
+      // loginUser returns data directly on success, throws error on failure
+      // Token is already stored by loginUser function
+      
+      const payload = JSON.parse(atob(result.access_token.split(".")[1]))
 
-        const payload = JSON.parse(atob(result.access_token.split(".")[1]))
-
-        // Validate payload before setting state
-        if (!payload.sub || !payload.role) {
-          throw new Error('Invalid token received from server')
-        }
-
-        setUser({
-          email: payload.sub,  // Use 'sub' consistently
-          role: payload.role
-        })
-
-        setIsAuthenticated(true)
-
-        return { success: true }
-      } else {
-        // Handle different error types
-        if (result.isLocked) {
-          return { success: false, error: result.error, isLocked: true }
-        } else {
-          return { success: false, error: result.error }
-        }
+      // Validate payload before setting state
+      if (!payload.sub || !payload.role) {
+        throw new Error('Invalid token received from server')
       }
 
+      setUser({
+        _id: payload.sub,  // Extract MongoDB ObjectId from sub field
+        email: payload.sub,  // Use 'sub' consistently for email/username
+        role: payload.role
+      })
+
+      setIsAuthenticated(true)
+
+      return { success: true }
     } catch (error) {
       console.error('Login error:', error)
-      return { success: false, error: "Server error" }
+      
+      // Check if it's a specific error type
+      const errorMessage = error.message || "Login failed"
+      
+      // Check for account lockout or verification requirements
+      if (errorMessage.includes("locked") || errorMessage.includes("suspended")) {
+        return { success: false, error: errorMessage, isLocked: true }
+      } else if (errorMessage.includes("verify") || errorMessage.includes("verification")) {
+        return { success: false, error: errorMessage, requiresVerification: true }
+      } else {
+        return { success: false, error: errorMessage }
+      }
     }
   }
 

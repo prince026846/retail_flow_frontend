@@ -6,14 +6,23 @@ import { VitePWA } from 'vite-plugin-pwa'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    react(),
+    react({
+      // Enable Fast Refresh
+      fastRefresh: true
+    }),
+    // Gzip compression
     viteCompression({
       algorithm: 'gzip',
-      ext: '.gz'
+      ext: '.gz',
+      threshold: 10240, // Only compress files larger than 10KB
+      minRatio: 0.8
     }),
+    // Brotli compression (better than gzip)
     viteCompression({
       algorithm: 'brotliCompress',
-      ext: '.br'
+      ext: '.br',
+      threshold: 10240,
+      minRatio: 0.8
     }),
     VitePWA({
       registerType: 'autoUpdate',
@@ -70,6 +79,18 @@ export default defineConfig({
                 maxAgeSeconds: 60 * 60 * 24 // 24 hours
               }
             }
+          },
+          // Cache JavaScript chunks aggressively
+          {
+            urlPattern: /^https?:.*\.js$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'js-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24 * 7 // 7 days
+              }
+            }
           }
         ]
       }
@@ -79,34 +100,52 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          // Vendor chunks for third-party libraries
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          charts: ['chart.js', 'react-chartjs-2'],
-          utils: ['axios', 'html5-qrcode']
-        },
-        chunkFileNames: 'assets/js/[name]-[hash].js',
-        entryFileNames: 'assets/js/[name]-[hash].js',
-        assetFileNames: 'assets/[ext]/[name]-[hash].[ext]'
+          // Core vendor libraries
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'charts-vendor': ['chart.js', 'react-chartjs-2', 'recharts'],
+          'utils-vendor': ['axios', 'framer-motion', 'lucide-react', 'html5-qrcode']
+        }
       }
     },
-    chunkSizeWarningLimit: 1000,
-    sourcemap: false,
+    chunkSizeWarningLimit: 500, // Increased for development
+    sourcemap: true, // Enable in development for debugging
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true,
-        drop_debugger: true
+        drop_console: false, // Keep console in development
+        drop_debugger: false
       }
-    },
-    cssCodeSplit: true
+    }
   },
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8001',
         changeOrigin: true,
+        secure: false,
       }
+    },
+    // Optimize dev server performance
+    hmr: {
+      overlay: false // Disable HMR overlay for better performance
+    },
+    // Improve dev server speed
+    fs: {
+      strict: false
+    },
+    // Reduce build overhead
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-router-dom',
+        'axios',
+        'framer-motion',
+        'lucide-react',
+        'chart.js',
+        'react-chartjs-2',
+        'recharts'
+      ]
     }
   }
 })

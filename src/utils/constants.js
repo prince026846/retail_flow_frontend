@@ -7,7 +7,9 @@ export const ROLES = {
 
 export const ROUTES = {
   OWNER_DASHBOARD: '/owner',
-  EMPLOYEE_DASHBOARD: '/employee'
+  ANALYTICS: '/analytics',
+  EMPLOYEE_DASHBOARD: '/employee',
+  BUSINESS_INSIGHTS: '/business-insights'
 };
 
 export const COLORS = {

@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { lazyWithTracking } from './utils/performance';
 import OfflineStatus from './components/OfflineStatus';
 import InstallPrompt from './components/InstallPrompt';
@@ -10,11 +11,20 @@ import InstallPrompt from './components/InstallPrompt';
 const Login = lazyWithTracking(() => import('./pages/Login'), 'login');
 const Register = lazyWithTracking(() => import('./pages/Register'), 'register');
 const OwnerDashboard = lazyWithTracking(() => import('./pages/OwnerDashboard'), 'owner-dashboard');
+const Analytics = lazyWithTracking(() => import('./pages/Analytics'), 'analytics');
 const EmployeeDashboard = lazyWithTracking(() => import('./pages/EmployeeDashboard'), 'employee-dashboard');
+const Inventory = lazyWithTracking(() => import('./pages/Inventory'), 'inventory');
 const EmailVerification = lazyWithTracking(() => import('./pages/EmailVerification'), 'email-verification');
 const ResendVerification = lazyWithTracking(() => import('./pages/ResendVerification'), 'resend-verification');
 const PasswordResetRequest = lazyWithTracking(() => import('./pages/PasswordResetRequest'), 'password-reset-request');
 const PasswordReset = lazyWithTracking(() => import('./pages/PasswordReset'), 'password-reset');
+const AIInsights = lazyWithTracking(() => import('./pages/AIInsights'), 'ai-insights');
+const CustomerManagement = lazyWithTracking(() => import('./pages/CustomerManagement'), 'customer-management');
+const SupplierManagement = lazyWithTracking(() => import('./pages/SupplierManagement'), 'supplier-management');
+const OrdersManagement = lazyWithTracking(() => import('./pages/OrdersManagement'), 'orders-management');
+const Settings = lazyWithTracking(() => import('./pages/Settings'), 'settings');
+const EmployeeProducts = lazyWithTracking(() => import('./pages/EmployeeProducts'), 'employee-products');
+const WorkforceAnalytics = lazyWithTracking(() => import('./pages/WorkforceAnalytics'), 'workforce-analytics');
 
 // Loading component for lazy loaded routes
 const RouteLoader = () => (
@@ -135,6 +145,76 @@ function AppRoutes() {
         } 
       />
       <Route 
+        path="/analytics" 
+        element={
+          <RoleGuard requiredRole="owner">
+            <Suspense fallback={<RouteLoader />}>
+              <Analytics />
+            </Suspense>
+          </RoleGuard>
+        } 
+      />
+      <Route 
+        path="/inventory" 
+        element={
+          <RoleGuard requiredRole="owner">
+            <Suspense fallback={<RouteLoader />}>
+              <Inventory />
+            </Suspense>
+          </RoleGuard>
+        } 
+      />
+      <Route 
+        path="/business-insights" 
+        element={
+          <RoleGuard requiredRole="owner">
+            <Suspense fallback={<RouteLoader />}>
+              <AIInsights />
+            </Suspense>
+          </RoleGuard>
+        } 
+      />
+      <Route 
+        path="/customers" 
+        element={
+          <RoleGuard requiredRole="owner">
+            <Suspense fallback={<RouteLoader />}>
+              <CustomerManagement />
+            </Suspense>
+          </RoleGuard>
+        } 
+      />
+      <Route 
+        path="/suppliers" 
+        element={
+          <RoleGuard requiredRole="owner">
+            <Suspense fallback={<RouteLoader />}>
+              <SupplierManagement />
+            </Suspense>
+          </RoleGuard>
+        } 
+      />
+      <Route 
+        path="/orders" 
+        element={
+          <RoleGuard requiredRole="owner">
+            <Suspense fallback={<RouteLoader />}>
+              <OrdersManagement />
+            </Suspense>
+          </RoleGuard>
+        } 
+      />
+      <Route 
+        path="/settings" 
+        element={
+          <RoleGuard requiredRole="owner">
+            <Suspense fallback={<RouteLoader />}>
+              <Settings />
+            </Suspense>
+          </RoleGuard>
+        } 
+      />
+<Route 
         path="/employee" 
         element={
           <RoleGuard requiredRole="employee">
@@ -144,7 +224,26 @@ function AppRoutes() {
           </RoleGuard>
         } 
       />
-      
+      <Route 
+        path="/employee/products" 
+        element={
+          <RoleGuard requiredRole="employee">
+            <Suspense fallback={<RouteLoader />}>
+              <EmployeeProducts />
+            </Suspense>
+          </RoleGuard>
+        } 
+      />
+      <Route 
+        path="/workforce-analytics" 
+        element={
+          <RoleGuard requiredRole="owner">
+            <Suspense fallback={<RouteLoader />}>
+              <WorkforceAnalytics />
+            </Suspense>
+          </RoleGuard>
+        } 
+      />
       {/* Root Route - redirect to register by default */}
       <Route 
         path="/" 
@@ -165,15 +264,17 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppProvider>
-        <Router>
-          <OfflineStatus />
-          <InstallPrompt />
-          <AppRoutes />
-        </Router>
-      </AppProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppProvider>
+          <Router>
+            <OfflineStatus />
+            <InstallPrompt />
+            <AppRoutes />
+          </Router>
+        </AppProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

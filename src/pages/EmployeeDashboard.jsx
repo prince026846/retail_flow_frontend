@@ -1,15 +1,21 @@
 import React, { useState, useMemo, useEffect, Suspense } from 'react'; // Added useEffect
+import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../layouts/DashboardLayout';
 import KPICard from '../components/KPICard';
 import DataTable from '../components/DataTable';
 import ProductSelector from '../components/ProductSelector';
 import WebSocketStatus from '../components/WebSocketStatus';
 import { useAppContext } from '../context/AppContext';
+import { useTheme } from '../context/ThemeContext';
 import { isToday, isThisWeek } from '../utils/helpers';
-import { getProducts,getAnalytics } from "../services/api"; // Added API import
+import { getProducts, getAnalytics, getWorstProducts, makeAuthenticatedRequest } from "../services/api"; // Added API import
 import { Html5Qrcode } from "html5-qrcode";
 import { lazyWithTracking } from "../utils/performance";
 import websocketService from '../services/websocket';
+import { getCurrentApiUrl } from '../services/api';
+
+// Dynamic API URL that will automatically find working port
+const API_BASE = getCurrentApiUrl();
 
 // Lazy loaded billing component with performance tracking
 const BillingCart = lazyWithTracking(() => import('../components/BillingCart'), 'billing-cart');
@@ -22,6 +28,8 @@ const BillingLoader = () => (
 );
 
 const EmployeeDashboard = () => {
+  const navigate = useNavigate();
+  const { isDark, colors } = useTheme();
   // Removed 'products' from useAppContext as it now comes from the backend
   const { getSales, getLowStockProducts } = useAppContext();
   
@@ -52,8 +60,7 @@ const [lowStockProducts, setLowStockProducts] = useState([])
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const token = sessionStorage.getItem("retailflow_token");
-        const data = await getProducts(token);
+        const data = await getProducts();
         setProducts(data);
       } catch (err) {
         console.error("Failed to fetch products:", err);
@@ -113,43 +120,24 @@ useEffect(() => {
 
 const loadAnalytics = async () => {
   try {
+    const bestData = await getAnalytics()
+    const worstData = await getWorstProducts()
 
-    const token = sessionStorage.getItem("retailflow_token")
+    const bestMapped = bestData.map((item, index) => ({
+      id: index + 1,
+      name: item.name,
+      unitsSold: item.unitsSold,
+      category: item.category || "N/A",
+      stock: Array.isArray(item.stock) ? item.stock[0] : item.stock
+    }))
 
-    const bestRes = await fetch("http://127.0.0.1:8000/analytics/top-products", {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    })
-
-    const worstRes = await fetch("http://127.0.0.1:8000/analytics/worst-products", {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    })
-
-    if (!bestRes.ok || !worstRes.ok) {
-      throw new Error("Analytics request failed")
-    }
-
-    const bestData = await bestRes.json()
-    const worstData = await worstRes.json()
-
-  const bestMapped = bestData.map((item, index) => ({
-  id: index + 1,
-  name: item.name,
-  unitsSold: item.unitsSold,
-  category: item.category || "N/A",
-  stock: Array.isArray(item.stock) ? item.stock[0] : item.stock
-}))
-
-const worstMapped = worstData.map((item, index) => ({
-  id: index + 1,
-  name: item.name,
-  unitsSold: item.unitsSold,
-  category: item.category || "N/A",
-  stock: Array.isArray(item.stock) ? item.stock[0] : item.stock
-}))
+    const worstMapped = worstData.map((item, index) => ({
+      id: index + 1,
+      name: item.name,
+      unitsSold: item.unitsSold,
+      category: item.category || "N/A",
+      stock: Array.isArray(item.stock) ? item.stock[0] : item.stock
+    }))
 
     setBestSellers(bestMapped)
     setWorstSellers(worstMapped)
@@ -216,13 +204,7 @@ const worstMapped = worstData.map((item, index) => ({
   // }, [products, sessionSales]);
 const loadKPIs = async () => {
   try {
-
-    const token = sessionStorage.getItem("retailflow_token")
-
-    const res = await fetch("http://127.0.0.1:8000/analytics/sales-summary", {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-
+    const res = await makeAuthenticatedRequest("/analytics/sales-summary")
     const data = await res.json()
 
     setKpiData({
@@ -236,17 +218,9 @@ const loadKPIs = async () => {
 }
 const loadLowStock = async () => {
   try {
-
-    const token = sessionStorage.getItem("retailflow_token")
-
-    const res = await fetch("http://127.0.0.1:8000/analytics/low-stock-products", {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-
+    const res = await makeAuthenticatedRequest("/analytics/low-stock-products")
     const data = await res.json()
-
     setLowStockProducts(data)
-
   } catch (err) {
     console.error("Low stock error:", err)
   }
@@ -343,10 +317,8 @@ useEffect(() => {
     // and KPIs immediately to ensure updates
     const refreshData = async () => {
       try {
-        const token = sessionStorage.getItem("retailflow_token");
-        
         // Refresh products to update stock levels
-        const productData = await getProducts(token);
+        const productData = await getProducts();
         setProducts(productData);
         
         // Also refresh KPIs as backup
@@ -363,130 +335,190 @@ useEffect(() => {
 
   return (
     <DashboardLayout role="employee" pageTitle="Employee Dashboard">
- <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className={`${colors.background} min-h-screen rounded-xl`}>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+        <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} overflow-hidden`}>
+          <div className={`bg-gradient-to-r ${colors.primary} px-4 py-3`}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-semibold text-sm">Items Sold Today</h3>
+              <span className="text-xl">📦</span>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className={`text-2xl font-bold ${colors.text} mb-1`}>{kpiData.soldToday}</div>
+            <div className={`text-xs ${wsConnected ? 'text-green-500' : 'text-red-500'}`}>
+              {wsConnected ? '🟢 Live' : '🔴 Offline'}
+            </div>
+          </div>
+        </div>
 
-  <KPICard
-    title="Items Sold Today"
-    value={kpiData.soldToday}
-    icon="📦"
-    subtitle={wsConnected ? "🟢 Live" : "🔴 Offline"}
-  />
+        <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} overflow-hidden`}>
+          <div className={`bg-gradient-to-r ${colors.secondary} px-4 py-3`}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-semibold text-sm">Items Sold This Week</h3>
+              <span className="text-xl">📊</span>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className={`text-2xl font-bold ${colors.text} mb-1`}>{kpiData.soldWeek}</div>
+            <div className={`text-xs ${wsConnected ? 'text-green-500' : 'text-red-500'}`}>
+              {wsConnected ? '🟢 Live' : '🔴 Offline'}
+            </div>
+          </div>
+        </div>
 
-  <KPICard
-    title="Items Sold This Week"
-    value={kpiData.soldWeek}
-    icon="📊"
-    subtitle={wsConnected ? "🟢 Live" : "🔴 Offline"}
-  />
-
-  <KPICard
-    title="Low Stock Alerts"
-    value={lowStockProducts.length}
-    icon="⚠️"
-  />
-
-</div>
-
-<div className="flex flex-wrap gap-4 mb-10">
-  <button
-    onClick={() => setShowBilling(!showBilling)}
-    className="btn btn-primary"
-  >
-    <span className="mr-2">{showBilling ? "📊" : "➕"}</span>
-    {showBilling ? "Hide Billing" : "Create Bill"}
-  </button>
-
-  {showBilling && (
-    <button
-      onClick={() => setShowScanner(!showScanner)}
-      className="btn btn-secondary bg-indigo-600 text-white"
-    >
-      <span className="mr-2">📷</span>
-      {showScanner ? "Close Scanner" : "Scan Barcode"}
-    </button>
-  )}
-</div>
-{showBilling && (
-  <div className="space-y-6 mb-10">
-
-    {showScanner && (
-      <div className="card p-4 bg-white shadow-md max-w-md mx-auto">
-        <div id="reader"></div>
-        <p className="text-center text-sm text-gray-500 mt-2">
-          Align barcode inside the box
-        </p>
+        <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} overflow-hidden`}>
+          <div className={`bg-gradient-to-r ${colors.warning} px-4 py-3`}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-semibold text-sm">Low Stock Alerts</h3>
+              <span className="text-xl">⚠️</span>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className={`text-2xl font-bold ${colors.text} mb-1`}>{lowStockProducts.length}</div>
+            <div className={`text-xs ${lowStockProducts.length > 0 ? 'text-orange-500' : 'text-green-500'}`}>
+              {lowStockProducts.length > 0 ? 'Action Needed' : 'All Good'}
+            </div>
+          </div>
+        </div>
       </div>
-    )}
 
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <ProductSelector products={products} />
-      <Suspense fallback={<BillingLoader />}>
-        <BillingCart onSaleComplete={handleSaleComplete} />
-      </Suspense>
-    </div>
-
-  </div>
-)}
-      {/* <div className="flex flex-wrap gap-4 mb-10">
-        <button onClick={() => setShowBilling(!showBilling)} className="btn btn-primary">
-          <span className="mr-2">{showBilling ? '📊' : '➕'}</span>
-          {showBilling ? 'Hide Billing' : 'Create Bill'}
+      {/* Action Buttons */}
+      <div className="flex flex-wrap gap-3 mb-8">
+        <button
+          onClick={() => navigate('/employee/products')}
+          className="px-4 py-2 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition-all duration-300 shadow-md text-sm font-medium"
+        >
+          <span className="mr-2">📦</span>
+          View Products
         </button>
-        <button className="btn btn-secondary">
-          <span className="mr-2">📝</span>
-          Request Stock Update
-        </button>
-      </div> */}
-      
-      {/* {showBilling && ( */}
-        {/* // <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10"> */}
-          {/* Ensure these components also receive the new products if they don't use context */}
-          {/* <ProductSelector products={products} />  */}
-          {/* // <BillingCart onSaleComplete={handleSaleComplete} /> */}
-        {/* </div> */}
-      {/* )} */}
-      
 
-      <div className="space-y-6">
+        <button
+          onClick={() => setShowBilling(!showBilling)}
+          className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-md text-sm font-medium"
+        >
+          <span className="mr-2">{showBilling ? "📊" : "💳"}</span>
+          {showBilling ? "Hide Billing" : "Quick Billing"}
+        </button>
+
+        {showBilling && (
+          <button
+            onClick={() => setShowScanner(!showScanner)}
+            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg hover:from-indigo-700 hover:to-blue-700 transition-all duration-300 shadow-md text-sm font-medium"
+          >
+            <span className="mr-2">📷</span>
+            {showScanner ? "Close Scanner" : "Scan Barcode"}
+          </button>
+        )}
+      </div>
+
+      {/* Billing Section */}
+      {showBilling && (
+        <div className="space-y-4 mb-8">
+          {showScanner && (
+            <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} p-3 max-w-md mx-auto`}>
+              <div id="reader"></div>
+              <p className={`text-center text-sm ${colors.textSecondary} mt-2`}>
+                Align barcode inside the box
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} overflow-hidden`}>
+              <div className={`bg-gradient-to-r ${colors.accent} px-4 py-3`}>
+                <h3 className="text-white font-semibold flex items-center text-sm">
+                  <span className="mr-2">🛒</span>
+                  Product Selector
+                </h3>
+              </div>
+              <div className="p-4">
+                <ProductSelector products={products} />
+              </div>
+            </div>
+
+            <Suspense fallback={<BillingLoader />}>
+              <BillingCart onSaleComplete={handleSaleComplete} />
+            </Suspense>
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Tables */}
+      <div className="space-y-4">
         {isLoading ? (
-          <div className="text-center py-10">Loading products...</div>
+          <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} p-8 text-center`}>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+            <p className={`mt-4 ${colors.textSecondary}`}>Loading products...</p>
+          </div>
         ) : (
           <>
             {bestSellers.length > 0 ? (
-              <DataTable
-                title="Top 5 Best-Selling Products (Your Session)"
-                columns={productColumns}
-                data={bestSellers}
-              />
+              <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} overflow-hidden`}>
+                <div className={`bg-gradient-to-r ${colors.primary} px-4 py-3`}>
+                  <h3 className="text-white font-semibold flex items-center text-sm">
+                    <span className="mr-2">🏆</span>
+                    Top 5 Best-Selling Products
+                  </h3>
+                </div>
+                <div className="p-4">
+                  <DataTable
+                    columns={productColumns}
+                    data={bestSellers}
+                  />
+                </div>
+              </div>
             ) : (
-              <div className="card p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Top 5 Best-Selling Products</h3>
-                <p className="text-gray-500 text-center py-8">No sales recorded yet</p>
+              <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} p-6 text-center`}>
+                <div className="text-4xl mb-3">📊</div>
+                <h3 className={`text-lg font-semibold ${colors.text} mb-2`}>No Sales Yet</h3>
+                <p className={colors.textSecondary}>Start selling to see your best products here</p>
               </div>
             )}
             
             {worstSellers.length > 0 && (
-              <DataTable
-                title="Top 5 Worst-Selling Products (Your Session)"
-                columns={productColumns}
-                data={worstSellers}
-              />
+              <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} overflow-hidden`}>
+                <div className={`bg-gradient-to-r ${colors.warning} px-4 py-3`}>
+                  <h3 className="text-white font-semibold flex items-center text-sm">
+                    <span className="mr-2">📉</span>
+                    Top 5 Worst-Selling Products
+                  </h3>
+                </div>
+                <div className="p-4">
+                  <DataTable
+                    columns={productColumns}
+                    data={worstSellers}
+                  />
+                </div>
+              </div>
             )}
-             <DataTable
-        title="Low Stock Products"
-        columns={[
-          { label: "Product", key: "name" },
-          { label: "Category", key: "category" },
-          { label: "Stock Left", key: "stock" }
-        ]}
-        data={lowStockProducts}
-      />
+
+            <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} overflow-hidden`}>
+              <div className={`bg-gradient-to-r ${colors.warning} px-4 py-3`}>
+                <h3 className="text-white font-semibold flex items-center text-sm">
+                  <span className="mr-2">⚠️</span>
+                  Low Stock Products
+                </h3>
+              </div>
+              <div className="p-4">
+                <DataTable
+                  columns={[
+                    { label: "Product", key: "name" },
+                    { label: "Category", key: "category" },
+                    { label: "Stock Left", key: "stock" }
+                  ]}
+                  data={lowStockProducts}
+                />
+              </div>
+            </div>
           </>
         )}
       </div>
       
       {/* WebSocket Status Indicator */}
       <WebSocketStatus connected={wsConnected} userRole="Employee" />
+      </div>
     </DashboardLayout>
   );
 };
