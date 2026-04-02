@@ -17,6 +17,7 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import KPICard from './KPICard';
 import { useAuth } from '../context/AuthContext';
+import { smartAPI } from '../services/api';
 
 const EmployeePerformance = () => {
   const { user } = useAuth();
@@ -41,136 +42,315 @@ const EmployeePerformance = () => {
     }
   }, [user]);
 
-  // API call functions with optimized timeout
-  const fetchEmployeePerformance = async (employeeId = userId) => {
-    const startTime = performance.now();
+  const createDefaultPerformanceData = () => {
+    const now = new Date().toISOString();
+    return {
+      total_sales: 0,
+      total_orders: 0,
+      average_order_value: 0,
+      conversion_rate: 0,
+      performance_score: 0,
+      trend: 'stable',
+      period_start: now,
+      period_end: now,
+      updated_at: now,
+      customer_satisfaction_score: null,
+      attendance_rate: null,
+      productivity_score: null,
+      rank: null,
+      metrics: {
+        sales_this_month: 0,
+        orders_this_month: 0,
+        average_daily_sales: 0,
+        conversion_rate: 0
+      }
+    };
+  };
+
+  const makeAuthorizedRequest = async (path, options = {}) => {
+    const token = sessionStorage.getItem('retailflow_token');
+    if (!token) {
+      const authError = new Error('Authentication token not found');
+      authError.status = 401;
+      throw authError;
+    }
+
+    return smartAPI.makeRequest(path, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+  };
+
+  const fetchJson = async (path, options = {}) => {
+    const controller = new AbortController();
+    const timeoutMs = options.timeoutMs ?? 5000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-      const token = sessionStorage.getItem('retailflow_token');
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); 
-      
-      const API_BASE = getCurrentApiUrl();
-      const response = await fetch(`${API_BASE}/employees/performance/${employeeId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+      const response = await makeAuthorizedRequest(path, {
+        ...options,
         signal: controller.signal
       });
-      
-      clearTimeout(timeoutId);
-      
-      const endTime = performance.now();
-      const duration = endTime - startTime;
-      console.log(`Performance API call took ${duration.toFixed(2)}ms`);
-      
+
       if (!response.ok) {
-        if (response.status === 404) {
-          // No performance data found - create default data instead of error
-          console.log('No performance data found, creating default data for employee:', employeeId);
-          return {
-            total_sales: 0,
-            total_orders: 0,
-            average_order_value: 0,
-            conversion_rate: 0,  // Add conversion_rate at root level
-            performance_score: 0,
-            trend: 'stable',
-            period_start: new Date().toISOString(),
-            period_end: new Date().toISOString(),
-            metrics: {
-              sales_this_month: 0,
-              orders_this_month: 0,
-              average_daily_sales: 0,
-              conversion_rate: 0
-            }
-          };
-        }
-        throw new Error(`Failed to fetch performance data (${response.status})`);
+        const requestError = new Error(`Request failed (${response.status})`);
+        requestError.status = response.status;
+        throw requestError;
       }
+
       return await response.json();
-    } catch (err) {
-      const endTime = performance.now();
-      const duration = endTime - startTime;
-      console.error(`Error fetching performance after ${duration.toFixed(2)}ms:`, err);
-      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
+  const computePerformanceScore = (totalSales, totalOrders, averageOrderValue) => {
+    const salesScore = Math.min(50, (totalSales / 5000) * 50);
+    const ordersScore = Math.min(30, (totalOrders / 50) * 30);
+    const avgOrderScore = Math.min(20, (averageOrderValue / 100) * 20);
+    return Number((salesScore + ordersScore + avgOrderScore).toFixed(1));
+  };
+
+  const normalizePerformanceData = (data = {}, fallback = createDefaultPerformanceData()) => {
+    const totalSales = Number(data.total_sales ?? data.totalRevenue ?? fallback.total_sales ?? 0);
+    const totalOrders = Number(data.total_orders ?? data.orderCount ?? fallback.total_orders ?? 0);
+    const averageOrderValue = Number(
+      data.average_order_value ??
+      data.avgOrderValue ??
+      (totalOrders > 0 ? totalSales / totalOrders : 0)
+    );
+
+    return {
+      ...fallback,
+      ...data,
+      total_sales: totalSales,
+      total_orders: totalOrders,
+      average_order_value: averageOrderValue,
+      conversion_rate: Number(data.conversion_rate ?? fallback.conversion_rate ?? 0),
+      performance_score: Number(
+        data.performance_score ??
+        fallback.performance_score ??
+        computePerformanceScore(totalSales, totalOrders, averageOrderValue)
+      ),
+      trend: data.trend || fallback.trend || 'stable',
+      period_start: data.period_start || data.first_order || fallback.period_start,
+      period_end: data.period_end || data.last_order || fallback.period_end,
+      updated_at: data.updated_at || new Date().toISOString(),
+      customer_satisfaction_score: data.customer_satisfaction_score ?? fallback.customer_satisfaction_score,
+      attendance_rate: data.attendance_rate ?? fallback.attendance_rate,
+      productivity_score: data.productivity_score ?? fallback.productivity_score,
+      rank: data.rank ?? fallback.rank
+    };
+  };
+
+  const fetchOrdersForEmployee = async (employeeId = userId, limit = 100) => {
+    const orders = await fetchJson(`/orders/?page=1&limit=${limit}`, { timeoutMs: 8000 });
+
+    if (!Array.isArray(orders)) {
+      return [];
+    }
+
+    return orders.filter((order) => String(order.user_id) === String(employeeId));
+  };
+
+  const mapOrdersToSalesHistory = (orders) => {
+    return orders
+      .map((order) => {
+        const productsSold = Array.isArray(order.items)
+          ? order.items.map((item) => item.name || item.product_name).filter(Boolean)
+          : [];
+
+        return {
+          order_id: String(order.id || order.order_id || ''),
+          customer_name: order.customer_name || (order.customer_id ? `Customer ${String(order.customer_id).slice(-6)}` : 'Walk-in'),
+          sale_amount: Number(order.total_price || 0),
+          products_sold: productsSold,
+          sale_date: order.created_at || new Date().toISOString(),
+          order_status: order.status || 'completed'
+        };
+      })
+      .filter((order) => Boolean(order.order_id))
+      .sort((a, b) => new Date(b.sale_date) - new Date(a.sale_date));
+  };
+
+  const fetchEmployeePerformance = async (employeeId = userId) => {
+    const fallback = createDefaultPerformanceData();
+
+    if (!employeeId) {
+      return fallback;
+    }
+
+    if (userRole === 'owner') {
+      try {
+        const response = await makeAuthorizedRequest(`/employees/${employeeId}/performance`);
+        if (response.status === 404) {
+          return fallback;
+        }
+
+        if (!response.ok) {
+          const requestError = new Error(`Failed to fetch performance data (${response.status})`);
+          requestError.status = response.status;
+          throw requestError;
+        }
+
+        const data = await response.json();
+        return normalizePerformanceData(data, fallback);
+      } catch (error) {
+        console.warn('Owner performance endpoint unavailable, using order-derived fallback:', error);
+      }
+    }
+
+    try {
+      const employeeOrders = await fetchOrdersForEmployee(employeeId, 100);
+
+      if (!employeeOrders.length) {
+        return fallback;
+      }
+
+      const totalSales = employeeOrders.reduce((sum, order) => sum + Number(order.total_price || 0), 0);
+      const totalOrders = employeeOrders.length;
+      const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
+
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthOrders = employeeOrders.filter((order) => new Date(order.created_at) >= monthStart);
+      const monthSales = monthOrders.reduce((sum, order) => sum + Number(order.total_price || 0), 0);
+      const daysElapsed = Math.max(1, Math.floor((now - monthStart) / (1000 * 60 * 60 * 24)) + 1);
+
+      const orderDates = employeeOrders
+        .map((order) => new Date(order.created_at))
+        .filter((date) => !Number.isNaN(date.getTime()));
+
+      const firstOrderDate = orderDates.length ? new Date(Math.min(...orderDates)) : now;
+      const lastOrderDate = orderDates.length ? new Date(Math.max(...orderDates)) : now;
+
+      return normalizePerformanceData(
+        {
+          total_sales: totalSales,
+          total_orders: totalOrders,
+          average_order_value: averageOrderValue,
+          performance_score: computePerformanceScore(totalSales, totalOrders, averageOrderValue),
+          trend: 'stable',
+          period_start: firstOrderDate.toISOString(),
+          period_end: lastOrderDate.toISOString(),
+          updated_at: now.toISOString(),
+          metrics: {
+            sales_this_month: monthSales,
+            orders_this_month: monthOrders.length,
+            average_daily_sales: monthSales / daysElapsed,
+            conversion_rate: 0
+          }
+        },
+        fallback
+      );
+    } catch (error) {
+      console.error('Failed to build fallback employee performance:', error);
+      return fallback;
     }
   };
 
   const fetchLeaderboard = async () => {
-    const startTime = performance.now();
+    const buildSelfEntry = async () => {
+      const selfPerformance = performanceData || await fetchEmployeePerformance(userId);
+      return [{
+        employee_id: userId,
+        rank: 1,
+        employee_name: user?.name || user?.email || 'Current User',
+        employee_email: user?.email || 'N/A',
+        total_sales: selfPerformance.total_sales || 0,
+        total_orders: selfPerformance.total_orders || 0,
+        average_order_value: selfPerformance.average_order_value || 0,
+        conversion_rate: selfPerformance.conversion_rate || 0
+      }];
+    };
+
+    if (userRole !== 'owner') {
+      return buildSelfEntry();
+    }
+
     try {
-      const token = sessionStorage.getItem('retailflow_token');
-      const response = await fetch(`${getCurrentApiUrl()}/employees/performance/leaderboard?limit=10`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const endTime = performance.now();
-      console.log(`Leaderboard API call took ${endTime - startTime}ms`);
-      
-      if (!response.ok) throw new Error('Failed to fetch leaderboard');
-      const data = await response.json();
-      return data.leaderboard;
-    } catch (err) {
-      console.error('Error fetching leaderboard:', err);
-      throw err;
+      const data = await fetchJson('/analytics/sales-by-employee?limit=10', { timeoutMs: 8000 });
+      const leaderboardRows = (Array.isArray(data) ? data : []).map((employee, index) => ({
+        employee_id: String(employee.userId || employee.employee_id || `employee-${index}`),
+        rank: index + 1,
+        employee_name: employee.username || employee.employee_name || employee.email || 'Unknown',
+        employee_email: employee.email || employee.employee_email || 'N/A',
+        total_sales: Number(employee.totalRevenue ?? employee.total_sales ?? 0),
+        total_orders: Number(employee.orderCount ?? employee.total_orders ?? 0),
+        average_order_value: Number(employee.avgOrderValue ?? employee.average_order_value ?? 0),
+        conversion_rate: Number(employee.conversion_rate ?? 0)
+      }));
+
+      return leaderboardRows.length > 0 ? leaderboardRows : buildSelfEntry();
+    } catch (error) {
+      if (error.status === 403 || error.status === 404) {
+        return buildSelfEntry();
+      }
+      throw error;
     }
   };
 
   const fetchSalesHistory = async (employeeId = userId) => {
-    try {
-      const token = sessionStorage.getItem('retailflow_token');
-      const response = await fetch(`${getCurrentApiUrl()}/employees/${employeeId}/sales-history?limit=20`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) throw new Error('Failed to fetch sales history');
-      return await response.json();
-    } catch (err) {
-      console.error('Error fetching sales history:', err);
-      throw err;
-    }
+    const employeeOrders = await fetchOrdersForEmployee(employeeId, 100);
+    return mapOrdersToSalesHistory(employeeOrders).slice(0, 20);
   };
 
-  const fetchReviews = async (employeeId = userId) => {
-    try {
-      const token = sessionStorage.getItem('retailflow_token');
-      const response = await fetch(`${getCurrentApiUrl()}/employees/${employeeId}/performance-reviews?limit=5`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) throw new Error('Failed to fetch reviews');
-      return await response.json();
-    } catch (err) {
-      console.error('Error fetching reviews:', err);
-      throw err;
-    }
+  const fetchReviews = async () => {
+    // Backend endpoint for performance reviews is not implemented yet.
+    // Return empty data and let UI render the placeholder state.
+    return [];
   };
 
   const fetchAnalytics = async () => {
-    try {
-      const token = sessionStorage.getItem('retailflow_token');
-      const response = await fetch(`${getCurrentApiUrl()}/employees/analytics`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) throw new Error('Failed to fetch analytics');
-      return await response.json();
-    } catch (err) {
-      console.error('Error fetching analytics:', err);
-      throw err;
+    if (userRole !== 'owner') {
+      return null;
     }
+
+    const [workforceData, salesByEmployeeData] = await Promise.all([
+      fetchJson('/analytics/workforce', { timeoutMs: 8000 }),
+      fetchJson('/analytics/sales-by-employee?limit=200', { timeoutMs: 8000 })
+    ]);
+
+    const employees = Array.isArray(salesByEmployeeData) ? salesByEmployeeData : [];
+    const totalEmployees = Number(workforceData?.total_employees || 0);
+    const totalSales = Number(workforceData?.total_sales || 0);
+    const activeEmployees = Number(workforceData?.active_employees || 0);
+
+    const salesDistribution = employees.reduce((acc, employee) => {
+      const revenue = Number(employee.totalRevenue || 0);
+      if (revenue >= 50000) {
+        acc.high_performers += 1;
+      } else if (revenue >= 15000) {
+        acc.mid_performers += 1;
+      } else {
+        acc.entry_level += 1;
+      }
+      return acc;
+    }, {
+      high_performers: 0,
+      mid_performers: 0,
+      entry_level: 0
+    });
+
+    const topEmployee = employees[0];
+
+    return {
+      total_employees: totalEmployees,
+      active_employees: activeEmployees,
+      total_sales: totalSales,
+      average_sales_per_employee: totalEmployees > 0 ? totalSales / totalEmployees : 0,
+      performance_trends: [],
+      sales_distribution: salesDistribution,
+      top_performer: topEmployee ? {
+        employee_name: topEmployee.username || topEmployee.email || 'Unknown',
+        total_sales: Number(topEmployee.totalRevenue || 0),
+        total_orders: Number(topEmployee.orderCount || 0)
+      } : null
+    };
   };
 
   // Load data based on active tab
@@ -193,7 +373,7 @@ const EmployeePerformance = () => {
           
           case 'sales':
             const salesData = await fetchSalesHistory();
-            setSalesHistory(salesData.sales_history);
+            setSalesHistory(salesData);
             break;
           
           case 'reviews':
@@ -210,28 +390,11 @@ const EmployeePerformance = () => {
         }
       } catch (err) {
         console.error('Error loading data:', err);
-        // Provide better error handling for missing performance data
-        if (err.message.includes('No performance data found')) {
-          // Set default data instead of error
-          setPerformanceData({
-            total_sales: 0,
-            total_orders: 0,
-            average_order_value: 0,
-            conversion_rate: 0,  // Add conversion_rate at root level
-            performance_score: 0,
-            trend: 'stable',
-            period_start: new Date().toISOString(),
-            period_end: new Date().toISOString(),
-            metrics: {
-              sales_this_month: 0,
-              orders_this_month: 0,
-              average_daily_sales: 0,
-              conversion_rate: 0
-            }
-          });
-          setError(null); // Clear the error
+        if (activeTab === 'overview') {
+          setPerformanceData(createDefaultPerformanceData());
+          setError(null);
         } else {
-          setError(err.message);
+          setError(err.message || 'Failed to load employee performance data');
         }
       } finally {
         setLoading(false);
@@ -251,12 +414,21 @@ const EmployeePerformance = () => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR'
-    }).format(amount);
+    }).format(Number(amount || 0));
   };
 
   // Format date
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    if (!dateString) {
+      return 'N/A';
+    }
+
+    const parsedDate = new Date(dateString);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return 'N/A';
+    }
+
+    return parsedDate.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -603,6 +775,24 @@ const EmployeePerformance = () => {
 
   // Render reviews tab
   const renderReviews = () => {
+    if (!reviews.length) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-xl shadow-sm p-6"
+        >
+          <h3 className="text-lg font-semibold mb-2 flex items-center">
+            <MessageSquare className="w-5 h-5 mr-2 text-blue-500" />
+            Performance Reviews
+          </h3>
+          <p className="text-gray-600">
+            Performance reviews are not available yet. This module will be enabled when the backend endpoint is implemented.
+          </p>
+        </motion.div>
+      );
+    }
+
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}

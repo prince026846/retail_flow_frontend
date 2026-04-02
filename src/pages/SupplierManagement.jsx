@@ -7,7 +7,6 @@ import LowStockSuppliers from '../components/LowStockSuppliers';
 import { 
   getSuppliers, 
   createSupplier, 
-  updateSupplier, 
   deleteSupplier,
   getLowStockSuppliers 
 } from '../services/api';
@@ -26,6 +25,12 @@ const SupplierManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const itemsPerPage = 5;
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: itemsPerPage,
+    totalCount: 0,
+    totalPages: 1
+  });
 
   const categories = ['All Categories', 'Electronics', 'Raw Materials', 'Logistics', 'Manufacturing', 'Industrial', 'Packaging'];
 
@@ -40,7 +45,8 @@ const SupplierManagement = () => {
     setError(null);
     try {
       const data = await getSuppliers(currentPage, itemsPerPage);
-      setSuppliers(data);
+      setSuppliers(data.suppliers);
+      setPagination(data.pagination);
     } catch (err) {
       setError('Failed to fetch suppliers');
       console.error('Suppliers fetch error:', err);
@@ -62,10 +68,20 @@ const SupplierManagement = () => {
     ? suppliers 
     : suppliers.filter(supplier => supplier.category === selectedCategory);
 
-  const totalPages = Math.ceil(filteredSuppliers.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentSuppliers = filteredSuppliers.slice(startIndex, endIndex);
+  // Backend already applies pagination; avoid slicing again on frontend.
+  const currentSuppliers = filteredSuppliers;
+  const totalPages = selectedCategory === 'All Categories'
+    ? Math.max(1, pagination.totalPages)
+    : 1;
+  const startIndex = filteredSuppliers.length > 0
+    ? (selectedCategory === 'All Categories' ? (currentPage - 1) * itemsPerPage + 1 : 1)
+    : 0;
+  const endIndex = selectedCategory === 'All Categories'
+    ? (startIndex === 0 ? 0 : startIndex + filteredSuppliers.length - 1)
+    : filteredSuppliers.length;
+  const totalResults = selectedCategory === 'All Categories'
+    ? pagination.totalCount
+    : filteredSuppliers.length;
 
   const getStatusColor = (status) => {
     switch(status) {
@@ -375,7 +391,7 @@ const SupplierManagement = () => {
           <div className="px-6 py-4 border-t border-gray-700">
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-400">
-                Showing {startIndex + 1} to {Math.min(endIndex, filteredSuppliers.length)} of {filteredSuppliers.length} results
+                Showing {startIndex} to {endIndex} of {totalResults} results
               </div>
               <div className="flex items-center space-x-2">
                 <button

@@ -8,14 +8,10 @@ import WebSocketStatus from '../components/WebSocketStatus';
 import { useAppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { isToday, isThisWeek } from '../utils/helpers';
-import { getProducts, getAnalytics, getWorstProducts, makeAuthenticatedRequest } from "../services/api"; // Added API import
+import { getProducts, getAnalytics, getWorstProducts, makeAuthenticatedRequest } from "../services/api";
 import { Html5Qrcode } from "html5-qrcode";
 import { lazyWithTracking } from "../utils/performance";
 import websocketService from '../services/websocket';
-import { getCurrentApiUrl } from '../services/api';
-
-// Dynamic API URL that will automatically find working port
-const API_BASE = getCurrentApiUrl();
 
 // Lazy loaded billing component with performance tracking
 const BillingCart = lazyWithTracking(() => import('../components/BillingCart'), 'billing-cart');
@@ -44,10 +40,9 @@ const EmployeeDashboard = () => {
   soldWeek: 0
 })
   const [showScanner, setShowScanner] = useState(false)
-  const [scanner, setScanner] = useState(null)
-
-const [lowStockProducts, setLowStockProducts] = useState([])
-  const [wsConnected, setWsConnected] = useState(false)
+  const [scanner, setScanner] = useState(null);
+  const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [wsConnected, setWsConnected] = useState(false);
   
   const columns = [
   { field: "id", headerName: "ID", width: 90 },
@@ -445,7 +440,6 @@ useEffect(() => {
         </div>
       )}
 
-      {/* Analytics Tables */}
       <div className="space-y-4">
         {isLoading ? (
           <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} p-8 text-center`}>
@@ -458,15 +452,11 @@ useEffect(() => {
               <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} overflow-hidden`}>
                 <div className={`bg-gradient-to-r ${colors.primary} px-4 py-3`}>
                   <h3 className="text-white font-semibold flex items-center text-sm">
-                    <span className="mr-2">🏆</span>
-                    Top 5 Best-Selling Products
+                    <span className="mr-2">🏆</span>Top 5 Best-Selling Products
                   </h3>
                 </div>
                 <div className="p-4">
-                  <DataTable
-                    columns={productColumns}
-                    data={bestSellers}
-                  />
+                  <DataTable columns={productColumns} data={bestSellers} />
                 </div>
               </div>
             ) : (
@@ -481,15 +471,11 @@ useEffect(() => {
               <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} overflow-hidden`}>
                 <div className={`bg-gradient-to-r ${colors.warning} px-4 py-3`}>
                   <h3 className="text-white font-semibold flex items-center text-sm">
-                    <span className="mr-2">📉</span>
-                    Top 5 Worst-Selling Products
+                    <span className="mr-2">📉</span>Top 5 Worst-Selling Products
                   </h3>
                 </div>
                 <div className="p-4">
-                  <DataTable
-                    columns={productColumns}
-                    data={worstSellers}
-                  />
+                  <DataTable columns={productColumns} data={worstSellers} />
                 </div>
               </div>
             )}
@@ -497,17 +483,12 @@ useEffect(() => {
             <div className={`${colors.card} rounded-xl shadow-lg border ${colors.border} overflow-hidden`}>
               <div className={`bg-gradient-to-r ${colors.warning} px-4 py-3`}>
                 <h3 className="text-white font-semibold flex items-center text-sm">
-                  <span className="mr-2">⚠️</span>
-                  Low Stock Products
+                  <span className="mr-2">⚠️</span>Low Stock Products
                 </h3>
               </div>
               <div className="p-4">
                 <DataTable
-                  columns={[
-                    { label: "Product", key: "name" },
-                    { label: "Category", key: "category" },
-                    { label: "Stock Left", key: "stock" }
-                  ]}
+                  columns={[{ label: "Product", key: "name" }, { label: "Category", key: "category" }, { label: "Stock Left", key: "stock" }]}
                   data={lowStockProducts}
                 />
               </div>
@@ -516,7 +497,6 @@ useEffect(() => {
         )}
       </div>
       
-      {/* WebSocket Status Indicator */}
       <WebSocketStatus connected={wsConnected} userRole="Employee" />
       </div>
     </DashboardLayout>

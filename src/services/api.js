@@ -1,100 +1,157 @@
-// Dynamic port configuration - will try ports in order
 const API_PORTS = [8000, 8001, 8002, 8003, 8004, 8005]
-const API_HOST = "127.0.0.1"
+const DEFAULT_API_PROTOCOL = "http:"
+const DEFAULT_API_HOST = "127.0.0.1"
 
-// Smart API client that tries different ports
+const stripTrailingSlash = (value) => value.replace(/\/+$/, "")
+const isLocalHost = (hostname) => hostname === "127.0.0.1" || hostname === "localhost"
+
+const normalizePath = (urlPath) => {
+  if (!urlPath) return "/"
+  return urlPath.startsWith("/") ? urlPath : `/${urlPath}`
+}
+
+const getDefaultLocalBaseUrls = () => {
+  return API_PORTS.map((port) => `${DEFAULT_API_PROTOCOL}//${DEFAULT_API_HOST}:${port}`)
+}
+
+const getCandidateBaseUrls = () => {
+  const envUrlRaw = import.meta.env.VITE_API_URL?.trim()
+  if (!envUrlRaw) {
+    return getDefaultLocalBaseUrls()
+  }
+
+  try {
+    const parsed = new URL(envUrlRaw)
+    const basePath = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/+$/, "")
+
+    if (isLocalHost(parsed.hostname)) {
+      const preferredPort = Number(parsed.port)
+      const orderedPorts = [...new Set([preferredPort, ...API_PORTS].filter((port) => Number.isInteger(port) && port > 0))]
+      return orderedPorts.map((port) => `${parsed.protocol || DEFAULT_API_PROTOCOL}//${parsed.hostname}:${port}${basePath}`)
+    }
+
+    return [stripTrailingSlash(envUrlRaw)]
+  } catch (error) {
+    console.warn("Invalid VITE_API_URL. Falling back to localhost ports 8000-8005.", error)
+    return getDefaultLocalBaseUrls()
+  }
+}
+
+const shouldRetryAcrossLocalPorts = (url) => {
+  if (!url.startsWith("http")) {
+    return true
+  }
+
+  try {
+    const parsed = new URL(url)
+    return isLocalHost(parsed.hostname)
+  } catch {
+    return false
+  }
+}
+
+const toRequestPath = (url) => {
+  if (!url.startsWith("http")) {
+    return normalizePath(url)
+  }
+
+  try {
+    const parsed = new URL(url)
+    return `${normalizePath(parsed.pathname)}${parsed.search}${parsed.hash}`
+  } catch {
+    return normalizePath(url)
+  }
+}
+
+// Smart API client that tries different base URLs
 class SmartAPIClient {
   constructor() {
-    this.currentPortIndex = 0
-    this.workingPort = null
-    this.failedPorts = new Set()
+    this.baseUrls = getCandidateBaseUrls()
+    this.currentBaseIndex = 0
+    this.workingBaseUrl = null
+    this.failedBaseUrls = new Set()
   }
 
   getBaseUrl() {
-    // If we have a working port, use it
-    if (this.workingPort) {
-      return `http://${API_HOST}:${this.workingPort}`
+    if (this.workingBaseUrl) {
+      return this.workingBaseUrl
     }
-    
-    // Try environment variable first
-    const envUrl = import.meta.env.VITE_API_URL
-    if (envUrl) {
-      return envUrl
-    }
-    
-    // Default to first available port
-    return `http://${API_HOST}:${API_PORTS[this.currentPortIndex]}`
+
+    return this.baseUrls[this.currentBaseIndex] || this.baseUrls[0]
   }
 
-  async tryNextPort() {
-    this.failedPorts.add(API_PORTS[this.currentPortIndex])
-    
-    // Find next available port
-    for (let i = 0; i < API_PORTS.length; i++) {
-      if (!this.failedPorts.has(API_PORTS[i])) {
-        this.currentPortIndex = i
-        return `http://${API_HOST}:${API_PORTS[i]}`
+  markBaseAsWorking(baseUrl) {
+    this.workingBaseUrl = stripTrailingSlash(baseUrl)
+    const matchedIndex = this.baseUrls.indexOf(this.workingBaseUrl)
+    if (matchedIndex >= 0) {
+      this.currentBaseIndex = matchedIndex
+    }
+  }
+
+  async tryNextBase() {
+    const currentBase = this.baseUrls[this.currentBaseIndex]
+    if (currentBase) {
+      this.failedBaseUrls.add(currentBase)
+    }
+
+    for (let i = 0; i < this.baseUrls.length; i++) {
+      if (!this.failedBaseUrls.has(this.baseUrls[i])) {
+        this.currentBaseIndex = i
+        return this.baseUrls[i]
       }
     }
-    
-    // All ports failed, reset and try again
-    this.failedPorts.clear()
-    this.currentPortIndex = 0
-    this.workingPort = null
-    return `http://${API_HOST}:${API_PORTS[0]}`
+
+    // All candidates failed, reset and start from first URL again.
+    this.failedBaseUrls.clear()
+    this.currentBaseIndex = 0
+    this.workingBaseUrl = null
+    return this.baseUrls[0]
   }
 
   async makeRequest(url, options = {}) {
-    const maxRetries = API_PORTS.length
+    const shouldRetry = shouldRetryAcrossLocalPorts(url)
+    const requestPath = shouldRetry ? toRequestPath(url) : url
+    const maxRetries = shouldRetry ? this.baseUrls.length : 1
     let lastError = null
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const baseUrl = shouldRetry ? this.getBaseUrl() : null
+      const fullUrl = shouldRetry ? `${baseUrl}${requestPath}` : requestPath
+
       try {
-        const baseUrl = this.getBaseUrl()
-        const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`
-        
         console.log(`🔄 Attempt ${attempt + 1}: Trying ${fullUrl}`)
-        
         const response = await fetch(fullUrl, options)
-        
-        // If we get a successful response, mark this port as working
-        if (response.ok || response.status === 401) {
-          // 401 is good - means endpoint exists, just needs auth
-          this.workingPort = API_PORTS[this.currentPortIndex]
-          console.log(`✅ Working port found: ${this.workingPort}`)
+
+        if (shouldRetry && (response.ok || response.status === 401)) {
+          this.markBaseAsWorking(baseUrl)
+          console.log(`✅ Working backend found: ${this.workingBaseUrl}`)
           return response
         }
-        
-        // If it's a 404, try next port
-        if (response.status === 404) {
-          throw new Error(`Port ${API_PORTS[this.currentPortIndex]} returned 404`)
+
+        // 404 often means wrong service/port in local multi-port setup.
+        if (shouldRetry && response.status === 404) {
+          throw new Error(`Backend ${baseUrl} returned 404`)
         }
-        
-        // For other errors, don't retry (like 400, 500 etc)
+
         return response
-        
       } catch (error) {
-        console.log(`❌ Port ${API_PORTS[this.currentPortIndex]} failed:`, error.message)
         lastError = error
-        
-        // Try next port
-        const nextUrl = await this.tryNextPort()
-        if (nextUrl === url) {
-          // We've tried all ports
+
+        if (!shouldRetry || attempt >= maxRetries - 1) {
           break
         }
+
+        console.log(`❌ Backend ${baseUrl} failed:`, error.message)
+        await this.tryNextBase()
       }
     }
-    
+
     throw lastError || new Error("All API ports failed")
   }
 }
 
 // Global smart API client instance
 const smartAPI = new SmartAPIClient()
-
-// For backward compatibility
-const API_BASE = smartAPI.getBaseUrl()
 
 // Export helper for other components to get current API URL
 export const getCurrentApiUrl = () => smartAPI.getBaseUrl()
@@ -114,7 +171,7 @@ const isTokenExpired = (token) => {
   try {
     const payload = JSON.parse(atob(token.split(".")[1]))
     return payload.exp < Date.now() / 1000
-  } catch (error) {
+  } catch {
     return true
   }
 }
@@ -137,7 +194,7 @@ const refreshAccessToken = async () => {
     throw new Error("No refresh token available")
   }
 
-  const response = await fetch(`${API_BASE}/auth/refresh`, {
+  const response = await smartAPI.makeRequest("/auth/refresh", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -169,7 +226,7 @@ export const makeAuthenticatedRequest = async (url, options = {}) => {
         const newToken = await refreshAccessToken()
         token = newToken
         onTokenRefreshed(newToken)
-      } catch (error) {
+      } catch {
         refreshSubscribers.forEach(callback => callback(null))
         refreshSubscribers = []
         // Don't automatically clear tokens - let auth context handle it
@@ -264,7 +321,7 @@ export const registerUser = async (userData) => {
 
 export const changePassword = async (currentPassword, newPassword) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/auth/change-password`, {
+    const res = await makeAuthenticatedRequest(`/auth/change-password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -461,9 +518,9 @@ export const getCategorySales = async () => {
   }
 }
 
-export const getOrders = async () => {
+export const getOrders = async (page = 1, limit = 100) => {
   try {
-    const res = await makeAuthenticatedRequest("/orders/")
+    const res = await makeAuthenticatedRequest(`/orders/?page=${page}&limit=${limit}`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -476,7 +533,7 @@ export const getOrders = async () => {
 
 export const verifyEmail = async (token) => {
   try {
-    const res = await fetch(`${API_BASE}/auth/verify-email`, {
+    const res = await smartAPI.makeRequest("/auth/verify-email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -499,7 +556,7 @@ export const verifyEmail = async (token) => {
 
 export const resendVerificationEmail = async (email) => {
   try {
-    const res = await fetch(`${API_BASE}/auth/resend-verification`, {
+    const res = await smartAPI.makeRequest("/auth/resend-verification", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -522,7 +579,7 @@ export const resendVerificationEmail = async (email) => {
 
 export const requestPasswordReset = async (email) => {
   try {
-    const res = await fetch(`${API_BASE}/auth/request-password-reset`, {
+    const res = await smartAPI.makeRequest("/auth/request-password-reset", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -545,7 +602,7 @@ export const requestPasswordReset = async (email) => {
 
 export const resetPassword = async (token, newPassword) => {
   try {
-    const res = await fetch(`${API_BASE}/auth/reset-password`, {
+    const res = await smartAPI.makeRequest("/auth/reset-password", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -569,7 +626,7 @@ export const resetPassword = async (token, newPassword) => {
 // Customer API functions
 export const getCustomers = async (page = 1, limit = 10) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/customers/?page=${page}&limit=${limit}`)
+    const res = await makeAuthenticatedRequest(`/customers/?page=${page}&limit=${limit}`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -581,7 +638,7 @@ export const getCustomers = async (page = 1, limit = 10) => {
 
 export const createCustomer = async (customer) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/customers/`, {
+    const res = await makeAuthenticatedRequest(`/customers/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -600,7 +657,7 @@ export const createCustomer = async (customer) => {
 
 export const getCustomerById = async (id) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/customers/${id}`)
+    const res = await makeAuthenticatedRequest(`/customers/${id}`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -612,7 +669,7 @@ export const getCustomerById = async (id) => {
 
 export const updateCustomer = async (id, customer) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/customers/${id}`, {
+    const res = await makeAuthenticatedRequest(`/customers/${id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json"
@@ -631,7 +688,7 @@ export const updateCustomer = async (id, customer) => {
 
 export const deleteCustomer = async (id) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/customers/${id}`, {
+    const res = await makeAuthenticatedRequest(`/customers/${id}`, {
       method: "DELETE"
     })
 
@@ -644,9 +701,14 @@ export const deleteCustomer = async (id) => {
   }
 }
 
-export const searchCustomers = async (query) => {
+export const searchCustomers = async (query, page = 1, limit = 10) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/customers/search?q=${encodeURIComponent(query)}`)
+    const searchParams = new URLSearchParams({
+      q: query,
+      page: String(page),
+      limit: String(limit)
+    })
+    const res = await makeAuthenticatedRequest(`/customers/search?${searchParams.toString()}`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -658,7 +720,7 @@ export const searchCustomers = async (query) => {
 
 export const getCustomerOrders = async (id) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/customers/${id}/orders`)
+    const res = await makeAuthenticatedRequest(`/customers/${id}/orders`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -671,8 +733,22 @@ export const getCustomerOrders = async (id) => {
 // Supplier API functions
 export const getSuppliers = async (page = 1, limit = 10) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/supplier/?page=${page}&limit=${limit}`)
-    return res.json()
+    const res = await makeAuthenticatedRequest(`/supplier/?page=${page}&limit=${limit}`)
+    const suppliers = await res.json()
+    const totalCount = Number(res.headers.get("X-Total-Count")) || suppliers.length
+    const totalPages = Number(res.headers.get("X-Total-Pages")) || 1
+    const currentPage = Number(res.headers.get("X-Page")) || page
+    const currentLimit = Number(res.headers.get("X-Limit")) || limit
+
+    return {
+      suppliers,
+      pagination: {
+        page: currentPage,
+        limit: currentLimit,
+        totalCount,
+        totalPages
+      }
+    }
   } catch (error) {
     if (error.message === "Authentication failed") {
       throw new Error("Authentication required");
@@ -683,7 +759,7 @@ export const getSuppliers = async (page = 1, limit = 10) => {
 
 export const createSupplier = async (supplier) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/supplier/`, {
+    const res = await makeAuthenticatedRequest(`/supplier/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -701,7 +777,7 @@ export const createSupplier = async (supplier) => {
 
 export const updateSupplier = async (id, supplier) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/supplier/${id}`, {
+    const res = await makeAuthenticatedRequest(`/supplier/${id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json"
@@ -719,7 +795,7 @@ export const updateSupplier = async (id, supplier) => {
 
 export const deleteSupplier = async (id) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/supplier/${id}`, {
+    const res = await makeAuthenticatedRequest(`/supplier/${id}`, {
       method: "DELETE"
     })
     return res.json()
@@ -733,7 +809,7 @@ export const deleteSupplier = async (id) => {
 
 export const getLowStockSuppliers = async () => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/supplier/low-stock`)
+    const res = await makeAuthenticatedRequest(`/supplier/low-stock`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -745,7 +821,7 @@ export const getLowStockSuppliers = async () => {
 
 export const createPurchaseOrder = async (supplierId, orderData) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/supplier/${supplierId}/purchase-orders`, {
+    const res = await makeAuthenticatedRequest(`/supplier/${supplierId}/purchase-orders`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -761,9 +837,52 @@ export const createPurchaseOrder = async (supplierId, orderData) => {
   }
 }
 
+export const getPurchaseOrders = async (page = 1, limit = 10, filters = {}) => {
+  try {
+    const query = new URLSearchParams({
+      page: String(page),
+      limit: String(limit)
+    })
+
+    if (filters.status && filters.status !== "all") {
+      query.set("status", filters.status)
+    }
+
+    if (filters.supplierId) {
+      query.set("supplier_id", filters.supplierId)
+    }
+
+    const res = await makeAuthenticatedRequest(`/supplier/purchase-orders?${query.toString()}`)
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const updatePurchaseOrderStatus = async (purchaseOrderId, status) => {
+  try {
+    const res = await makeAuthenticatedRequest(`/supplier/purchase-orders/${purchaseOrderId}/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ status })
+    })
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
 export const getSupplierPerformance = async (supplierId) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/supplier/${supplierId}/performance`)
+    const res = await makeAuthenticatedRequest(`/supplier/${supplierId}/performance`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -775,7 +894,7 @@ export const getSupplierPerformance = async (supplierId) => {
 
 export const updateSupplierProductCatalog = async (supplierId, products) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/supplier/${supplierId}/products`, {
+    const res = await makeAuthenticatedRequest(`/supplier/${supplierId}/products`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json"
@@ -794,7 +913,7 @@ export const updateSupplierProductCatalog = async (supplierId, products) => {
 // Employee API functions
 export const getAllEmployees = async () => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/employees/`)
+    const res = await makeAuthenticatedRequest(`/employees/`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -806,7 +925,7 @@ export const getAllEmployees = async () => {
 
 export const getEmployeePerformanceById = async (employeeId) => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/employees/${employeeId}/performance`)
+    const res = await makeAuthenticatedRequest(`/employees/${employeeId}/performance`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -818,7 +937,7 @@ export const getEmployeePerformanceById = async (employeeId) => {
 
 export const getWorkforceAnalytics = async () => {
   try {
-    const res = await makeAuthenticatedRequest(`${API_BASE}/analytics/workforce`)
+    const res = await makeAuthenticatedRequest(`/analytics/workforce`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -827,5 +946,3 @@ export const getWorkforceAnalytics = async () => {
     throw error
   }
 } 
-
-

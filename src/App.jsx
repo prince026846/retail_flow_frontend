@@ -25,6 +25,7 @@ const OrdersManagement = lazyWithTracking(() => import('./pages/OrdersManagement
 const Settings = lazyWithTracking(() => import('./pages/Settings'), 'settings');
 const EmployeeProducts = lazyWithTracking(() => import('./pages/EmployeeProducts'), 'employee-products');
 const WorkforceAnalytics = lazyWithTracking(() => import('./pages/WorkforceAnalytics'), 'workforce-analytics');
+const OwnerBillSettings = lazyWithTracking(() => import('./pages/OwnerBillSettings'), 'owner-bill-settings');
 
 // Loading component for lazy loaded routes
 const RouteLoader = () => (
@@ -240,6 +241,16 @@ function AppRoutes() {
           <RoleGuard requiredRole="owner">
             <Suspense fallback={<RouteLoader />}>
               <WorkforceAnalytics />
+            </Suspense>
+          </RoleGuard>
+        } 
+      />
+      <Route 
+        path="/owner/bill-settings" 
+        element={
+          <RoleGuard requiredRole="owner">
+            <Suspense fallback={<RouteLoader />}>
+              <OwnerBillSettings />
             </Suspense>
           </RoleGuard>
         } 

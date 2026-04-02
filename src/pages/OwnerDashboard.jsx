@@ -32,8 +32,6 @@ const ChartLoader = () => (
   </div>
 );
 
-const BASE_URL = "http://127.0.0.1:8000";
-
 const OwnerDashboard = () => {
   const { addProduct, updateProduct, deleteProduct } = useAppContext();
   const { colors } = useTheme();

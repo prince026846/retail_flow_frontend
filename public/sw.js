@@ -209,6 +209,11 @@ function isAPIRequest(request) {
   return API_ENDPOINTS.some(endpoint => url.pathname.includes(endpoint));
 }
 
+function isAuthRequest(request) {
+  const url = new URL(request.url);
+  return AUTH_ENDPOINTS.some((endpoint) => url.pathname.includes(endpoint)) || url.pathname.includes('/auth/');
+}
+
 async function getOfflineFallback(request) {
   const url = new URL(request.url);
   
@@ -309,7 +314,7 @@ self.addEventListener('notificationclick', (event) => {
   
   if (event.action === 'explore') {
     event.waitUntil(
-      clients.openWindow('/')
+      self.clients.openWindow('/')
     );
   }
 });

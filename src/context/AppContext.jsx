@@ -4,32 +4,30 @@ import {
   isLowStock,
   calculateCartTotal,
 } from "../utils/helpers";
-import { getProducts } from "../services/api";
+import { getProducts, makeAuthenticatedRequest } from "../services/api";
 
 const AppContext = createContext();
-
-const BASE_URL = "http://127.0.0.1:8000";
 
 // Helper — all authenticated API calls go through here.
 // Automatically attaches the token and redirects to /login on 401/403.
 const apiFetch = async (url, options = {}) => {
-  const token = sessionStorage.getItem("retailflow_token");
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
-
-  if (res.status === 401 || res.status === 403) {
-    localStorage.removeItem("retailflow_token");
-    window.location.href = "/login";
-    return null;
+  try {
+    return await makeAuthenticatedRequest(url, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
+  } catch (error) {
+    if (error.message === "Authentication failed" || error.message === "No authentication token available") {
+      sessionStorage.removeItem("retailflow_token");
+      sessionStorage.removeItem("retailflow_refresh_token");
+      window.location.href = "/login";
+      return null;
+    }
+    throw error;
   }
-
-  return res;
 };
 
 export function AppProvider({ children }) {
@@ -68,7 +66,7 @@ export function AppProvider({ children }) {
   const addProduct = async (productData) => {
     // productData already has the correct shape from ProductModal:
     // { name, price, stock, category, barcode, low_stock_threshold }
-    const res = await apiFetch(`${BASE_URL}/products/`, {
+    const res = await apiFetch(`/products/`, {
       method: "POST",
       body: JSON.stringify(productData),
     });
@@ -88,7 +86,7 @@ export function AppProvider({ children }) {
 
   const updateProduct = async (id, updates) => {
     // updates has the same shape as ProductCreate
-    const res = await apiFetch(`${BASE_URL}/products/${id}`, {
+    const res = await apiFetch(`/products/${id}`, {
       method: "PUT",
       body: JSON.stringify(updates),
     });
@@ -107,7 +105,7 @@ export function AppProvider({ children }) {
   };
 
   const deleteProduct = async (id) => {
-    const res = await apiFetch(`${BASE_URL}/products/${id}`, {
+    const res = await apiFetch(`/products/${id}`, {
       method: "DELETE",
     });
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPurchaseOrder } from '../services/api';
 
-const CreatePurchaseOrderModal = ({ isOpen, onClose, supplierId, supplierName }) => {
+const CreatePurchaseOrderModal = ({ isOpen, onClose, supplierId, supplierName, onSuccess }) => {
   const [items, setItems] = useState([
     { product_id: '', product_name: '', quantity: 1, unit_price: 0, total_price: 0 }
   ]);
@@ -56,13 +56,17 @@ const CreatePurchaseOrderModal = ({ isOpen, onClose, supplierId, supplierName })
         notes: notes || null
       };
 
-      await createPurchaseOrder(supplierId, orderData);
+      const createdPurchaseOrder = await createPurchaseOrder(supplierId, orderData);
       
       // Reset form
       setItems([{ product_id: '', product_name: '', quantity: 1, unit_price: 0, total_price: 0 }]);
       setExpectedDeliveryDate('');
       setNotes('');
       onClose();
+
+      if (typeof onSuccess === 'function') {
+        onSuccess(createdPurchaseOrder);
+      }
       
       // Show success message (you might want to use a toast notification)
       alert('Purchase order created successfully!');
