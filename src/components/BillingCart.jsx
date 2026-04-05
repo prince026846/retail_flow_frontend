@@ -6,7 +6,7 @@ import { createOrder, getProducts, getCustomers, makeAuthenticatedRequest, creat
 
 const BillingCart = ({ onSaleComplete, onOpenAddCustomer }) => {
   // Added 'cart' and 'clearCart' from context
-  const { cart, updateCartItem, removeFromCart, clearCart, refreshProducts } = useAppContext();
+  const { products, cart, updateCartItem, removeFromCart, addToCart, clearCart, refreshProducts } = useAppContext();
   const { isDark, colors } = useTheme();
   const [isProcessing, setIsProcessing] = useState(false);
   const [discount, setDiscount] = useState(0);
@@ -161,6 +161,62 @@ const BillingCart = ({ onSaleComplete, onOpenAddCustomer }) => {
       setCustomerLoading(false);
     }
   };
+
+  // Barcode scanner listener
+  const [barcodeNotification, setBarcodeNotification] = useState(null);
+  const barcodeBufferRef = useRef('');
+  const lastKeyTimeRef = useRef(Date.now());
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if typing in an input field (to avoid interference with search/customer entry)
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      const currentTime = Date.now();
+      
+      // If the time between keys is too long, it's a person typing, not a scanner
+      if (currentTime - lastKeyTimeRef.current > 50) {
+        barcodeBufferRef.current = '';
+      }
+      
+      lastKeyTimeRef.current = currentTime;
+
+      // Only care about digits and letters
+      if (e.key.length === 1 && /^[a-zA-Z0-9]$/.test(e.key)) {
+        barcodeBufferRef.current += e.key;
+      }
+
+      // If Enter is pressed, process the buffer
+      if (e.key === 'Enter') {
+        const buffer = barcodeBufferRef.current;
+        if (buffer.length >= 3) {
+          const product = products.find(p => p.barcode === buffer);
+          if (product) {
+            if (product.stock > 0) {
+              addToCart(product.id, 1);
+              setBarcodeNotification(`Scanned: ${product.name}`);
+              setTimeout(() => setBarcodeNotification(null), 3000);
+              
+              // Play a subtle beep if possible or just visual feedback
+              console.log('✅ Barcode Scanned successfully:', product.name);
+            } else {
+              setBarcodeNotification(`Out of Stock: ${product.name}`);
+              setTimeout(() => setBarcodeNotification(null), 3000);
+            }
+          } else {
+            console.log('❌ Unknown barcode scanned:', buffer);
+          }
+          barcodeBufferRef.current = '';
+          e.preventDefault();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [products, addToCart]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -333,6 +389,16 @@ const BillingCart = ({ onSaleComplete, onOpenAddCustomer }) => {
           Quick Billing
         </h3>
       </div>
+
+      {/* Barcode Notification Toast */}
+      {barcodeNotification && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 animate-bounce">
+          <div className="bg-green-600 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border-2 border-green-400">
+            <span className="text-xl">🎯</span>
+            <span className="font-bold">{barcodeNotification}</span>
+          </div>
+        </div>
+      )}
 
       <div className="p-4">
         {cart.length === 0 ? (
