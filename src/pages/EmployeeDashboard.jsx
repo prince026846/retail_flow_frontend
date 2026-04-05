@@ -27,7 +27,7 @@ const EmployeeDashboard = () => {
   const navigate = useNavigate();
   const { isDark, colors } = useTheme();
   // Removed 'products' from useAppContext as it now comes from the backend
-  const { getSales, getLowStockProducts } = useAppContext();
+  const { addToCart, getSales, getLowStockProducts } = useAppContext();
   
   // 1. Add local state for products
   const [products, setProducts] = useState([]);
@@ -89,8 +89,12 @@ useEffect(() => {
       )
 
       if (product) {
-        alert(`Product Found: ${product.name}`)
-        // TODO connect to cart
+        try {
+          addToCart(product.id || product._id, 1);
+          alert(`Success! ${product.name} added to cart.`);
+        } catch (error) {
+          alert(`Error adding to cart: ${error.message}`);
+        }
       } else {
         alert("Product not found")
       }
