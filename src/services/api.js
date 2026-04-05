@@ -347,7 +347,7 @@ export const changePassword = async (currentPassword, newPassword) => {
 
 export async function getProducts() {
   try {
-    const response = await makeAuthenticatedRequest("/products/")
+    const response = await makeAuthenticatedRequest("/products/?limit=1000")
     
     if (!response.ok) {
       throw new Error("Failed to fetch products");

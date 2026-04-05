@@ -44,23 +44,21 @@ export function AppProvider({ children }) {
   // LOAD PRODUCTS FROM SERVER ON MOUNT
   // ============================================================
 
+  const refreshProducts = async () => {
+    const token = sessionStorage.getItem("retailflow_token");
+    if (!token || !isAuthenticated) return;
+    
+    try {
+      const data = await getProducts();
+      setProducts(data);
+      return data;
+    } catch (err) {
+      console.error("Failed to refresh products:", err);
+    }
+  };
+
   useEffect(() => {
-    const loadProducts = async () => {
-      // Only load products if user is authenticated
-      const token = sessionStorage.getItem("retailflow_token");
-      if (!token || !isAuthenticated) {
-        console.log("No authentication token - skipping product load");
-        return;
-      }
-      
-      try {
-        const data = await getProducts();
-        setProducts(data);
-      } catch (err) {
-        console.error("Failed to load products:", err);
-      }
-    };
-    loadProducts();
+    refreshProducts();
   }, [isAuthenticated]);
 
   // ============================================================
@@ -114,7 +112,7 @@ export function AppProvider({ children }) {
     }
 
     const newProduct = await res.json();
-    setProducts((prev) => [...prev, newProduct]);
+    await refreshProducts(); // Ensure state is synced with server (including extra fields)
     return newProduct;
   };
 
@@ -134,7 +132,7 @@ export function AppProvider({ children }) {
     }
 
     const updated = await res.json();
-    setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    await refreshProducts();
     return updated;
   };
 
@@ -151,7 +149,7 @@ export function AppProvider({ children }) {
       throw new Error(err.detail || "Failed to delete product");
     }
 
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+    await refreshProducts();
   };
 
   // ============================================================
@@ -279,7 +277,9 @@ export function AppProvider({ children }) {
     clearCart,
     confirmSale,
     getSales,
+    getSales,
     getLowStockProducts,
+    refreshProducts,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -6,7 +6,7 @@ import { createOrder, getProducts, getCustomers, makeAuthenticatedRequest, creat
 
 const BillingCart = ({ onSaleComplete, onOpenAddCustomer }) => {
   // Added 'cart' and 'clearCart' from context
-  const { cart, updateCartItem, removeFromCart, clearCart } = useAppContext();
+  const { cart, updateCartItem, removeFromCart, clearCart, refreshProducts } = useAppContext();
   const { isDark, colors } = useTheme();
   const [isProcessing, setIsProcessing] = useState(false);
   const [discount, setDiscount] = useState(0);
@@ -282,7 +282,7 @@ const BillingCart = ({ onSaleComplete, onOpenAddCustomer }) => {
         clearCart(); // Clear local UI cart after successful DB entry
         setSelectedCustomerId('');
         
-        await getProducts() 
+        await refreshProducts();
 
         // Force immediate refresh of KPI data
         try {
