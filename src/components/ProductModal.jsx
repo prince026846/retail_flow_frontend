@@ -131,7 +131,8 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
         ? parseInt(formData.low_stock_threshold, 10)
         : 10,
       supplier: formData.supplier ? formData.supplier.trim() : "N/A",
-      image: formData.image
+      // Remove File object before sending as JSON (JSON cannot send files)
+      image: (formData.image instanceof File) ? null : formData.image
     };
 
     onSave(payload);
