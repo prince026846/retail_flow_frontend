@@ -3,13 +3,12 @@ import LineChart from '../LineChart';
 
 const MonthlySalesVelocityChart = ({ data = [], loading = false }) => {
   // Default data matching the screenshot
-  const defaultData = [3.2, 3.5, 3.8, 3.6, 4.0, 4.2, 3.9, 4.1, 4.3, 4.0, 4.2, 4.28];
-  const chartData = data.length > 0 ? data : defaultData;
+  const chartData = data.length > 0 ? data : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   
   const labels = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-  const currentValue = chartData[chartData.length - 1] || 4.28;
-  const previousValue = chartData[chartData.length - 2] || 4.2;
-  const growth = ((currentValue - previousValue) / previousValue * 100).toFixed(1);
+  const currentValue = chartData[chartData.length - 1] || 0;
+  const previousValue = chartData[chartData.length - 2] || 0;
+  const growth = previousValue !== 0 ? ((currentValue - previousValue) / previousValue * 100).toFixed(1) : 0;
 
   if (loading) {
     return (
@@ -30,7 +29,7 @@ const MonthlySalesVelocityChart = ({ data = [], loading = false }) => {
           <p className="text-sm text-gray-400">Aggregate performance over 12 months</p>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-bold text-white">${currentValue}M</div>
+          <div className="text-2xl font-bold text-white">₹{currentValue}M</div>
           <div className="text-sm text-green-400">+{growth}% vs LY</div>
         </div>
       </div>
@@ -57,7 +56,7 @@ const MonthlySalesVelocityChart = ({ data = [], loading = false }) => {
             <span className="text-gray-400">Monthly Revenue</span>
           </div>
           <div className="text-gray-400">
-            Average: ${(chartData.reduce((a, b) => a + b, 0) / chartData.length).toFixed(2)}M
+            Average: ₹{(chartData.reduce((a, b) => a + b, 0) / chartData.length).toFixed(2)}M
           </div>
         </div>
       </div>

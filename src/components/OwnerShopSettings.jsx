@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
-
-const API_URL = import.meta.env.VITE_API_URL || '';
+import { getShopSettings, updateShopSettings } from '../services/api';
 
 const OwnerShopSettings = () => {
   const { isDark, colors } = useTheme();
@@ -11,48 +10,30 @@ const OwnerShopSettings = () => {
   const [success, setSuccess] = useState(null);
   
   const [formData, setFormData] = useState({
-    business_name: 'My Shop',
+    business_name: '',
     address: '',
     gst_number: '',
-    terms_conditions: 'Thank you for your business!',
-    greeting_message: 'Welcome!'
+    terms_conditions: '',
+    greeting_message: ''
   });
 
   useEffect(() => {
     loadSettings();
   }, []);
 
-  const getAuthToken = () => sessionStorage.getItem('retailflow_token');
-
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/shop-settings/`, {
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
-        }
-      });
+      const data = await getShopSettings();
       
-      if (response.ok) {
-        const data = await response.json();
+      if (data) {
         setFormData({
-          business_name: data.business_name || 'My Shop',
+          business_name: data.business_name || '',
           address: data.address || '',
           gst_number: data.gst_number || '',
-          terms_conditions: data.terms_conditions || 'Thank you for your business!',
-          greeting_message: data.greeting_message || 'Welcome!'
+          terms_conditions: data.terms_conditions || '',
+          greeting_message: data.greeting_message || ''
         });
-      } else if (response.status === 404) {
-        // No settings yet, use defaults
-        setFormData({
-          business_name: 'My Shop',
-          address: '',
-          gst_number: '',
-          terms_conditions: 'Thank you for your business!',
-          greeting_message: 'Welcome!'
-        });
-      } else {
-        throw new Error('Failed to load settings');
       }
       setError(null);
     } catch (err) {
@@ -78,27 +59,13 @@ const OwnerShopSettings = () => {
     setSuccess(null);
 
     try {
-      // Validate required field
       if (!formData.business_name.trim()) {
         setError('Business name is required');
         setSaving(false);
         return;
       }
 
-      const response = await fetch(`${API_URL}/shop-settings/`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAuthToken()}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to save settings');
-      }
-
+      await updateShopSettings(formData);
       setSuccess('Shop settings saved successfully!');
     } catch (err) {
       setError(err.message || 'Failed to save shop settings');

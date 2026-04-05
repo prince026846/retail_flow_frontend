@@ -697,7 +697,7 @@ const BillingCart = ({ onSaleComplete, onOpenAddCustomer }) => {
                 ) : (
                   <>
                     <span className="mr-1">✅</span>
-                    Confirm • {formatCurrency(finalTotal)}
+                    Complete Sale • {formatCurrency(finalTotal)}
                   </>
                 )}
               </button>

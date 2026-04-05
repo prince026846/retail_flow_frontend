@@ -356,7 +356,6 @@ export async function getProducts() {
     return response.json();
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
       throw new Error("Authentication required");
     }
     throw error
@@ -376,7 +375,40 @@ export const createProduct = async (product) => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const updateProduct = async (id, product) => {
+  try {
+    const res = await makeAuthenticatedRequest(`/products/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(product)
+    })
+
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const deleteProduct = async (id) => {
+  try {
+    const res = await makeAuthenticatedRequest(`/products/${id}`, {
+      method: "DELETE"
+    })
+
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
       throw new Error("Authentication required");
     }
     throw error
@@ -396,44 +428,20 @@ export const createOrder = async (order) => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
       throw new Error("Authentication required");
     }
     throw error
   }
 }
 
-
-export const updateProduct = async (id, product) => {
+export const getOrders = async (page = 1, limit = 100, days = null) => {
   try {
-    const res = await makeAuthenticatedRequest(`/products/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(product)
-    })
-
+    const query = new URLSearchParams({ page: String(page), limit: String(limit) })
+    if (days) query.append('days', String(days))
+    const res = await makeAuthenticatedRequest(`/orders/?${query.toString()}`)
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
-      throw new Error("Authentication required");
-    }
-    throw error
-  }
-}
-
-export const deleteProduct = async (id) => {
-  try {
-    const res = await makeAuthenticatedRequest(`/products/${id}`, {
-      method: "DELETE"
-    })
-
-    return res.json()
-  } catch (error) {
-    if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
       throw new Error("Authentication required");
     }
     throw error
@@ -446,7 +454,6 @@ export const getAnalytics = async () => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
       throw new Error("Authentication required");
     }
     throw error
@@ -459,7 +466,6 @@ export const getThisMonthAnalytics = async () => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
       throw new Error("Authentication required");
     }
     throw error
@@ -472,7 +478,6 @@ export const getWorstProducts = async () => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
       throw new Error("Authentication required");
     }
     throw error
@@ -485,7 +490,6 @@ export const getLowStockProducts = async () => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
       throw new Error("Authentication required");
     }
     throw error
@@ -498,7 +502,6 @@ export const getMonthlyRevenue = async () => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
       throw new Error("Authentication required");
     }
     throw error
@@ -511,25 +514,11 @@ export const getCategorySales = async () => {
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
       throw new Error("Authentication required");
     }
     throw error
   }
 }
-
-export const getOrders = async (page = 1, limit = 100) => {
-  try {
-    const res = await makeAuthenticatedRequest(`/orders/?page=${page}&limit=${limit}`)
-    return res.json()
-  } catch (error) {
-    if (error.message === "Authentication failed") {
-      // Don't hard redirect - let auth context handle routing
-      throw new Error("Authentication required");
-    }
-    throw error
-  }
-} 
 
 export const verifyEmail = async (token) => {
   try {
@@ -910,7 +899,7 @@ export const updateSupplierProductCatalog = async (supplierId, products) => {
   }
 }
 
-// Employee API functions
+// Employee context & support (compatible names)
 export const getAllEmployees = async () => {
   try {
     const res = await makeAuthenticatedRequest(`/employees/`)
@@ -923,9 +912,101 @@ export const getAllEmployees = async () => {
   }
 }
 
+export const getEmployees = getAllEmployees;
+
 export const getEmployeePerformanceById = async (employeeId) => {
   try {
     const res = await makeAuthenticatedRequest(`/employees/${employeeId}/performance`)
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const getEmployeePerformance = getEmployeePerformanceById;
+
+export const createEmployee = async (employee) => {
+  try {
+    const res = await makeAuthenticatedRequest("/employees/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(employee)
+    })
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const deleteEmployee = async (id) => {
+  try {
+    const res = await makeAuthenticatedRequest(`/employees/${id}`, {
+      method: "DELETE"
+    })
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+// Shop Settings API functions
+export const getShopSettings = async () => {
+  try {
+    const res = await makeAuthenticatedRequest('/shop-settings/')
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const updateShopSettings = async (settings) => {
+  try {
+    const res = await makeAuthenticatedRequest('/shop-settings/', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(settings)
+    })
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+// Analytics & Insights
+export const getNexusInsights = async () => {
+  try {
+    const res = await makeAuthenticatedRequest('/analytics/nexus-insights')
+    return res.json()
+  } catch (error) {
+    if (error.message === "Authentication failed") {
+      throw new Error("Authentication required");
+    }
+    throw error
+  }
+}
+
+export const getProfitSummary = async () => {
+  try {
+    const res = await makeAuthenticatedRequest('/analytics/profit-summary')
     return res.json()
   } catch (error) {
     if (error.message === "Authentication failed") {
@@ -945,4 +1026,22 @@ export const getWorkforceAnalytics = async () => {
     }
     throw error
   }
-} 
+}
+
+export const downloadBill = async (orderId) => {
+  try {
+    const response = await makeAuthenticatedRequest(`/orders/${orderId}/bill`)
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `bill-${orderId}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+  } catch (error) {
+    console.error("Download bill error:", error)
+    throw error
+  }
+}

@@ -13,7 +13,7 @@ const KeyMetricsCards = ({
   const metrics = [
     {
       title: 'Total Revenue',
-      value: `$${totalRevenue.toLocaleString()}`,
+      value: `₹${totalRevenue.toLocaleString()}`,
       change: `+${revenueChange}%`,
       changeType: 'positive',
       icon: (
@@ -26,7 +26,7 @@ const KeyMetricsCards = ({
     },
     {
       title: 'Net Profit',
-      value: `$${netProfit.toLocaleString()}`,
+      value: `₹${netProfit.toLocaleString()}`,
       change: `+${profitChange}%`,
       changeType: 'positive',
       icon: (

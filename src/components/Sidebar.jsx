@@ -24,6 +24,16 @@ const Sidebar = ({ role, onClose }) => {
       role: 'owner'
     },
     {
+      name: 'Billing',
+      path: '/billing',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      ),
+      role: 'owner'
+    },
+    {
       name: 'Inventory',
       path: '/inventory',
       icon: (
@@ -94,6 +104,16 @@ const Sidebar = ({ role, onClose }) => {
       role: 'owner'
     },
     {
+      name: 'Team Management',
+      path: '/team',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      ),
+      role: 'owner'
+    },
+    {
       name: 'Bill Settings',
       path: '/owner/bill-settings',
       icon: (
@@ -128,11 +148,11 @@ const Sidebar = ({ role, onClose }) => {
       role: 'employee'
     },
     {
-      name: 'Quick Billing',
-      path: '/employee',
+      name: 'Billing',
+      path: '/billing',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         </svg>
       ),
       role: 'employee'

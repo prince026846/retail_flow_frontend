@@ -1,7 +1,7 @@
 import React from 'react';
 
 const MarginEfficiency = ({ data = {}, loading = false }) => {
-  const { revenue = 1200000, profit = 420000, efficiencyRatio = 75 } = data;
+  const { revenue = 0, profit = 0, efficiencyRatio = 0 } = data;
 
   if (loading) {
     return (
@@ -20,11 +20,11 @@ const MarginEfficiency = ({ data = {}, loading = false }) => {
 
   const formatCurrency = (value) => {
     if (value >= 1000000) {
-      return `$${(value / 1000000).toFixed(1)}M`;
+      return `₹${(value / 1000000).toFixed(1)}M`;
     } else if (value >= 1000) {
-      return `$${(value / 1000).toFixed(0)}K`;
+      return `₹${(value / 1000).toFixed(0)}K`;
     }
-    return `$${value.toFixed(0)}`;
+    return `₹${value.toFixed(0)}`;
   };
 
   const getEfficiencyColor = (ratio) => {

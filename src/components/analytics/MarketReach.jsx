@@ -1,9 +1,9 @@
 import React from 'react';
 
-const MarketReach = ({ loading = false }) => {
-  const marketData = {
-    newUsers: 28000,
-    description: 'Organic growth from social referrals peaking on weekends.'
+const MarketReach = ({ data, loading = false }) => {
+  const marketData = data || {
+    newUsers: 0,
+    description: 'Nexus is monitoring customer acquisition channels.'
   };
 
   if (loading) {
@@ -54,8 +54,8 @@ const MarketReach = ({ loading = false }) => {
         </div>
         
         <div className="mb-2">
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400">
-            Growing
+          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${marketData.newUsers > 0 ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'}`}>
+            {marketData.newUsers > 0 ? 'Growing' : 'Standby'}
           </span>
         </div>
       </div>
@@ -68,7 +68,7 @@ const MarketReach = ({ loading = false }) => {
       {/* Mini Chart */}
       <div className="mb-4">
         <div className="flex items-end justify-between h-8">
-          {[1200, 1800, 2400, 2200, 2800, 3200, 2800].map((value, index) => (
+          {(marketData.newUsers > 0 ? [1200, 1800, 2400, 2200, 2800, 3200, 2800] : [0, 0, 0, 0, 0, 0, 0]).map((value, index) => (
             <div
               key={index}
               className="w-2 bg-gradient-to-t from-blue-500 to-purple-500 rounded-t"
@@ -86,21 +86,21 @@ const MarketReach = ({ loading = false }) => {
             <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
             <span className="text-gray-400">Social</span>
           </div>
-          <span className="text-gray-300">45%</span>
+          <span className="text-gray-300">{marketData.newUsers > 0 ? '45%' : '0%'}</span>
         </div>
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center">
             <div className="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
             <span className="text-gray-400">Referral</span>
           </div>
-          <span className="text-gray-300">30%</span>
+          <span className="text-gray-300">{marketData.newUsers > 0 ? '30%' : '0%'}</span>
         </div>
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center">
             <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
             <span className="text-gray-400">Organic</span>
           </div>
-          <span className="text-gray-300">25%</span>
+          <span className="text-gray-300">{marketData.newUsers > 0 ? '25%' : '0%'}</span>
         </div>
       </div>
       
@@ -108,7 +108,9 @@ const MarketReach = ({ loading = false }) => {
       <div className="mt-4 pt-4 border-t border-gray-700">
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-400">Growth Rate</span>
-          <span className="text-green-400 font-medium">+18.5%</span>
+          <span className={marketData.newUsers > 0 ? "text-green-400 font-medium" : "text-gray-500 font-medium"}>
+             {marketData.newUsers > 0 ? "+18.5%" : "0%"}
+          </span>
         </div>
       </div>
     </div>

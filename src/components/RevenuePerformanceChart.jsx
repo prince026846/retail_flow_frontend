@@ -37,7 +37,7 @@ const RevenuePerformanceChart = ({ data = [] }) => {
           <div>
             <p className="text-sm text-gray-400">Average Monthly Revenue</p>
             <p className="text-lg font-semibold text-gray-100">
-              ${Math.round(chartData.reduce((a, b) => a + b, 0) / chartData.length).toLocaleString()}
+              ₹ {Math.round(chartData.reduce((a, b) => a + b, 0) / chartData.length).toLocaleString('en-IN')}
             </p>
           </div>
           <div className="text-right">

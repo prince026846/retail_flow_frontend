@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import DashboardLayout from "../layouts/DashboardLayout";
-import { getAnalytics, getMonthlyRevenue, getCategorySales } from "../services/api";
+import { getAnalytics, getMonthlyRevenue, getCategorySales, getWorstProducts, getThisMonthAnalytics } from "../services/api";
 import MonthlySalesVelocityChart from "../components/analytics/MonthlySalesVelocityChart";
 import MarginEfficiency from "../components/analytics/MarginEfficiency";
 import TopPerformers from "../components/analytics/TopPerformers";
@@ -13,7 +13,7 @@ import MarketReach from "../components/analytics/MarketReach";
 const Analytics = () => {
   const [analyticsData, setAnalyticsData] = useState([]);
   const [monthlyRevenue, setMonthlyRevenue] = useState([]);
-  const [categorySales, setCategorySales] = useState({ labels: [], values: [] });
+  const [categorySales, setCategorySales] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Sample data that matches the screenshots
@@ -50,16 +50,48 @@ const Analytics = () => {
     const loadAnalyticsData = async () => {
       try {
         setLoading(true);
-        // In a real implementation, you would fetch actual data
-        // For now, we'll use the sample data that matches the screenshots
-        setTimeout(() => {
-          setMonthlyRevenue(sampleData.monthlySales);
-          setCategorySales({
-            labels: sampleData.categorySplit.map(cat => cat.name),
-            values: sampleData.categorySplit.map(cat => cat.value)
-          });
-          setLoading(false);
-        }, 1000);
+        const [
+          revenueData,
+          categoryData,
+          topProducts,
+          worstProducts,
+          thisMonthData,
+        ] = await Promise.all([
+          getMonthlyRevenue(),
+          getCategorySales(),
+          getAnalytics(),
+          getWorstProducts(),
+          getThisMonthAnalytics(),
+        ]);
+
+        const categoryColors = ["#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#6366F1"];
+        const totalSalesValue = categoryData.values ? categoryData.values.reduce((a, b) => a + b, 0) : 0;
+        
+        const transformedCategorySales = (categoryData.labels || []).map((label, index) => {
+          const value = categoryData.values[index] || 0;
+          const percentage = totalSalesValue > 0 ? Math.round((value / totalSalesValue) * 100) : 0;
+          return {
+            name: label,
+            value: percentage,
+            color: categoryColors[index % categoryColors.length]
+          };
+        });
+
+        setMonthlyRevenue(revenueData.values || []);
+        setCategorySales(transformedCategorySales);
+        
+        // Transform data for components if needed
+        setAnalyticsData({
+          topPerformers: topProducts || [],
+          underPerformers: worstProducts || [],
+          marginEfficiency: {
+            revenue: thisMonthData.total_revenue || 0,
+            profit: (thisMonthData.total_revenue || 0) * 0.26, // Estimate 26% margin as per dashboard
+            efficiencyRatio: 75
+          }
+        });
+
+        setLoading(false);
       } catch (error) {
         console.error("Analytics loading error:", error);
         setLoading(false);
@@ -104,19 +136,19 @@ const Analytics = () => {
         
         {/* Margin Efficiency - Takes 1 column */}
         <div>
-          <MarginEfficiency data={sampleData.marginEfficiency} loading={loading} />
+          <MarginEfficiency data={analyticsData.marginEfficiency} loading={loading} />
         </div>
       </div>
 
       {/* Middle Row - Top Performers and Under-performers */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <TopPerformers data={sampleData.topPerformers} loading={loading} />
-        <UnderPerformers data={sampleData.underPerformers} loading={loading} />
+        <TopPerformers data={analyticsData.topPerformers} loading={loading} />
+        <UnderPerformers data={analyticsData.underPerformers} loading={loading} />
       </div>
 
       {/* Bottom Row - Category Split, AI Sentiment, Stock Alert, Market Reach */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
-        <CategorySplit data={sampleData.categorySplit} loading={loading} />
+        <CategorySplit data={categorySales} loading={loading} />
         <AISentimentAnalysis loading={loading} />
         <StockAlert loading={loading} />
         <MarketReach loading={loading} />

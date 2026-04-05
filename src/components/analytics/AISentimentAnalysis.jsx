@@ -1,11 +1,11 @@
 import React from 'react';
 
-const AISentimentAnalysis = ({ loading = false }) => {
-  const sentimentData = {
-    score: 4.8,
-    rating: "Excellent",
-    trend: 8,
-    description: "Sentiment trending up 8% due to fast fulfillment."
+const AISentimentAnalysis = ({ data, loading = false }) => {
+  const sentimentData = data || {
+    score: 0,
+    rating: "No Data",
+    trend: 0,
+    description: "Insufficient data to analyze customer sentiment yet."
   };
 
   if (loading) {
@@ -86,7 +86,7 @@ const AISentimentAnalysis = ({ loading = false }) => {
       {/* Mini Chart */}
       <div className="mt-4 pt-4 border-t border-gray-700">
         <div className="flex items-end justify-between h-8">
-          {[3.2, 3.5, 3.8, 4.1, 4.3, 4.6, 4.8].map((value, index) => (
+          {(data ? [3.2, 3.5, 3.8, 4.1, 4.3, 4.6, 4.8] : [0, 0, 0, 0, 0, 0, 0]).map((value, index) => (
             <div
               key={index}
               className="w-2 bg-gradient-to-t from-blue-500 to-green-500 rounded-t"

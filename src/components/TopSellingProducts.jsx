@@ -87,7 +87,7 @@ const TopSellingProducts = ({ data = [] }) => {
                   {product.unitsSold.toLocaleString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-100">
-                  ${product.revenue.toLocaleString()}
+                  ₹{product.revenue.toLocaleString('en-IN')}
                 </td>
               </tr>
             ))}

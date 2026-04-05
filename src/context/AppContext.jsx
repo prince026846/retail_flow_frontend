@@ -5,6 +5,8 @@ import {
   calculateCartTotal,
 } from "../utils/helpers";
 import { getProducts, makeAuthenticatedRequest } from "../services/api";
+import websocketService from "../services/websocket";
+import { useAuth } from "./AuthContext";
 
 const AppContext = createContext();
 
@@ -31,9 +33,11 @@ const apiFetch = async (url, options = {}) => {
 };
 
 export function AppProvider({ children }) {
+  const { user, isAuthenticated } = useAuth();
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
   const [sales, setSales] = useState([]);
+  const [wsConnected, setWsConnected] = useState(false);
   const [sessionId] = useState(generateId);
 
   // ============================================================
@@ -44,7 +48,7 @@ export function AppProvider({ children }) {
     const loadProducts = async () => {
       // Only load products if user is authenticated
       const token = sessionStorage.getItem("retailflow_token");
-      if (!token) {
+      if (!token || !isAuthenticated) {
         console.log("No authentication token - skipping product load");
         return;
       }
@@ -57,7 +61,37 @@ export function AppProvider({ children }) {
       }
     };
     loadProducts();
-  }, []);
+  }, [isAuthenticated]);
+
+  // ============================================================
+  // WEBSOCKET INITIALIZATION
+  // ============================================================
+
+  useEffect(() => {
+    const token = sessionStorage.getItem("retailflow_token");
+    if (token && isAuthenticated) {
+      websocketService.connect(token).catch(err => {
+        console.error("WebSocket connection failure:", err);
+      });
+
+      const handleConnected = () => setWsConnected(true);
+      const handleDisconnected = () => setWsConnected(false);
+
+      websocketService.on("connected", handleConnected);
+      websocketService.on("disconnected", handleDisconnected);
+      
+      // Update state in case it's already connected before events fired
+      setWsConnected(websocketService.isConnected());
+
+      return () => {
+        websocketService.off("connected", handleConnected);
+        websocketService.off("disconnected", handleDisconnected);
+      };
+    } else {
+      websocketService.disconnect();
+      setWsConnected(false);
+    }
+  }, [isAuthenticated]);
 
   // ============================================================
   // PRODUCT MANAGEMENT — all wired to the real API
@@ -231,6 +265,8 @@ export function AppProvider({ children }) {
   };
 
   const value = {
+    wsConnected,
+    user,
     products,
     cart,
     sales,

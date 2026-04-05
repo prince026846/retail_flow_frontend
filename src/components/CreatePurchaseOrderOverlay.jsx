@@ -101,7 +101,7 @@ const CreatePurchaseOrderOverlay = ({ isOpen, onClose, onCreateOrder }) => {
                   <tr key={product.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{product.productName}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{product.quantity}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">$ {product.unitCost.toFixed(2)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">₹ {product.unitCost.toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className={`w-2 h-2 rounded-full mr-2 ${
@@ -113,7 +113,7 @@ const CreatePurchaseOrderOverlay = ({ isOpen, onClose, onCreateOrder }) => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-white font-medium">
-                      ${product.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₹{product.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}
@@ -129,7 +129,7 @@ const CreatePurchaseOrderOverlay = ({ isOpen, onClose, onCreateOrder }) => {
               TOTAL ORDER VALUE
             </div>
             <div className="text-3xl font-bold text-white">
-              ${totalOrderValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ₹{totalOrderValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           </div>
         </div>

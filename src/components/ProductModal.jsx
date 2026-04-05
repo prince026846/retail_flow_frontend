@@ -260,7 +260,7 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
               <div>
                 <label htmlFor="cost_price" className="block text-sm font-medium text-gray-300 mb-2">COST PRICE</label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">$</span>
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">₹</span>
                   <input 
                     type="number" 
                     id="cost_price" 
@@ -279,7 +279,7 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
               <div>
                 <label htmlFor="price" className="block text-sm font-medium text-gray-300 mb-2">SELLING PRICE</label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">$</span>
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">₹</span>
                   <input 
                     type="number" 
                     id="price" 

@@ -1,15 +1,7 @@
 import React from 'react';
 
-const CategorySplit = ({ data = [], loading = false }) => {
-  // Default data matching the screenshot
-  const defaultData = [
-    { name: "ELECTRONICS", value: 45, color: "#3B82F6" },
-    { name: "HOME & LIVING", value: 20, color: "#10B981" },
-    { name: "APPAREL", value: 25, color: "#F59E0B" },
-    { name: "OTHERS", value: 10, color: "#8B5CF6" }
-  ];
-
-  const categories = data.length > 0 ? data : defaultData;
+const CategorySplit = ({ data, loading = false }) => {
+  const categories = data || [];
 
   if (loading) {
     return (
@@ -56,13 +48,15 @@ const CategorySplit = ({ data = [], loading = false }) => {
     `;
   };
 
+  // Legend
+  const totalValue = categories.reduce((sum, cat) => sum + (Number(cat.value) || 0), 0);
   let currentAngle = -90; // Start from top
 
   return (
-    <div className="bg-gray-800 rounded-xl p-6">
+    <div className="bg-gray-800 rounded-xl p-6 h-full flex flex-col">
       <div className="mb-6">
         <h3 className="text-xl font-semibold text-white mb-1">Category Split</h3>
-        <p className="text-sm text-gray-400">Revenue by category</p>
+        <p className="text-sm text-gray-400">Revenue volume by category</p>
       </div>
       
       {/* Donut Chart */}
@@ -70,8 +64,10 @@ const CategorySplit = ({ data = [], loading = false }) => {
         <div className="relative">
           <svg width="120" height="120" viewBox="0 0 100 100" className="transform -rotate-90">
             {categories.map((category, index) => {
+              const val = Number(category.value) || 0;
+              const slicePercentage = totalValue > 0 ? (val / totalValue) * 100 : 0;
               const startAngle = currentAngle;
-              const endAngle = startAngle + (category.value * 360) / 100;
+              const endAngle = startAngle + (slicePercentage * 360) / 100;
               currentAngle = endAngle;
 
               return (
@@ -93,20 +89,28 @@ const CategorySplit = ({ data = [], loading = false }) => {
         </div>
       </div>
       
-      {/* Legend */}
-      <div className="space-y-2">
-        {categories.map((category, index) => (
-          <div key={index} className="flex items-center justify-between">
-            <div className="flex items-center">
-              <div 
-                className="w-3 h-3 rounded-full mr-2"
-                style={{ backgroundColor: category.color }}
-              ></div>
-              <span className="text-sm text-gray-300">{category.name}</span>
+      {/* Legend with scroll if many categories */}
+      <div className="space-y-2 overflow-y-auto max-h-48 pr-2 custom-scrollbar">
+        {categories.map((category, index) => {
+          const val = Number(category.value) || 0;
+          const displayPercentage = totalValue > 0 ? ((val / totalValue) * 100).toFixed(1) : "0";
+          
+          return (
+            <div key={index} className="flex items-center justify-between group">
+              <div className="flex items-center">
+                <div 
+                  className="w-3 h-3 rounded-full mr-2 group-hover:scale-125 transition-transform"
+                  style={{ backgroundColor: category.color }}
+                ></div>
+                <span className="text-sm text-gray-300 truncate max-w-[120px]">{category.name}</span>
+              </div>
+              <span className="text-sm text-white font-medium">{displayPercentage}%</span>
             </div>
-            <span className="text-sm text-white font-medium">{category.value}%</span>
-          </div>
-        ))}
+          );
+        })}
+        {categories.length === 0 && (
+          <div className="text-center text-gray-500 text-xs py-4">No data recorded</div>
+        )}
       </div>
     </div>
   );

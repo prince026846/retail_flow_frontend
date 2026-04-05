@@ -1,36 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
+import OwnerShopSettings from '../components/OwnerShopSettings';
+import { getAllEmployees } from '../services/api';
 
 const Settings = () => {
   const [emailNotifications, setEmailNotifications] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
   const [aiInsightsFrequency, setAiInsightsFrequency] = useState('real-time');
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
-  const users = [
-    {
-      id: 1,
-      name: 'Adrian Miller',
-      initials: 'AM',
-      email: 'adrian@etherealretail.ai',
-      role: 'Owner',
-      status: 'Active'
-    },
-    {
-      id: 2,
-      name: 'Sarah Lo',
-      initials: 'SL',
-      email: 'sarah.lo@retail.ai',
-      role: 'Employee',
-      status: 'Active'
-    }
-  ];
-
-  const [storeDetails, setStoreDetails] = useState({
-    storeName: 'Ethereal Flagship',
-    location: 'New York, NY',
-    contactNumber: '+1 (555) 0123-4567',
-    taxId: 'US-990211-X'
-  });
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setLoadingUsers(true);
+        const data = await getAllEmployees();
+        setUsers(data || []);
+      } catch (error) {
+        console.error("Failed to fetch employees:", error);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   return (
     <DashboardLayout role="owner" pageTitle="Settings">
@@ -54,7 +47,7 @@ const Settings = () => {
           </div>
 
           {/* Table Header */}
-          <div className="grid grid-cols-12 gap-4 mb-4 text-gray-400 text-sm font-medium">
+          <div className="grid grid-cols-12 gap-4 mb-4 text-gray-400 text-sm font-medium border-b border-gray-700 pb-2">
             <div className="col-span-4">USER</div>
             <div className="col-span-2">ROLE</div>
             <div className="col-span-2">STATUS</div>
@@ -62,99 +55,57 @@ const Settings = () => {
           </div>
 
           {/* User Rows */}
-          {users.map((user) => (
-            <div key={user.id} className="grid grid-cols-12 gap-4 items-center py-4 border-b border-gray-700 last:border-0">
-              {/* User Info */}
-              <div className="col-span-4 flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
-                  {user.initials}
+          {loadingUsers ? (
+            <div className="py-8 text-center text-gray-400">Loading team members...</div>
+          ) : users.length > 0 ? (
+            users.map((user) => (
+              <div key={user._id} className="grid grid-cols-12 gap-4 items-center py-4 border-b border-gray-700 last:border-0">
+                {/* User Info */}
+                <div className="col-span-4 flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold">
+                    {user.name ? user.name.charAt(0) : 'U'}
+                  </div>
+                  <div>
+                    <div className="text-white font-medium">{user.name || 'Unnamed User'}</div>
+                    <div className="text-gray-400 text-sm">{user.email}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-white font-medium">{user.name}</div>
-                  <div className="text-gray-400 text-sm">{user.email}</div>
+
+                {/* Role */}
+                <div className="col-span-2">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    user.role === 'owner' 
+                      ? 'bg-purple-900 text-purple-300' 
+                      : 'bg-blue-900 text-blue-300'
+                  }`}>
+                    {user.role}
+                  </span>
+                </div>
+
+                {/* Status */}
+                <div className="col-span-2 flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${user.is_active !== false ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-gray-300">{user.is_active !== false ? 'Active' : 'Inactive'}</span>
+                </div>
+
+                {/* Actions */}
+                <div className="col-span-4 flex space-x-2">
+                  <button className="text-gray-400 hover:text-white transition-colors">
+                    Edit
+                  </button>
+                  <button className="text-gray-400 hover:text-red-400 transition-colors">
+                    Remove
+                  </button>
                 </div>
               </div>
-
-              {/* Role */}
-              <div className="col-span-2">
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  user.role === 'Owner' 
-                    ? 'bg-purple-900 text-purple-300' 
-                    : 'bg-blue-900 text-blue-300'
-                }`}>
-                  {user.role}
-                </span>
-              </div>
-
-              {/* Status */}
-              <div className="col-span-2 flex items-center space-x-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-gray-300">{user.status}</span>
-              </div>
-
-              {/* Actions */}
-              <div className="col-span-4 flex space-x-2">
-                <button className="text-gray-400 hover:text-white transition-colors">
-                  Edit
-                </button>
-                <button className="text-gray-400 hover:text-white transition-colors">
-                  Remove
-                </button>
-              </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            <div className="py-8 text-center text-gray-400">No team members found.</div>
+          )}
         </div>
 
-        {/* Store Details Section */}
-        <div className="bg-gray-800 rounded-xl p-6">
-          <h2 className="text-xl font-semibold text-white mb-6">STORE DETAILS</h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-gray-400 text-sm font-medium mb-2">STORE NAME</label>
-              <input
-                type="text"
-                value={storeDetails.storeName}
-                onChange={(e) => setStoreDetails({...storeDetails, storeName: e.target.value})}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-400 text-sm font-medium mb-2">LOCATION</label>
-              <input
-                type="text"
-                value={storeDetails.location}
-                onChange={(e) => setStoreDetails({...storeDetails, location: e.target.value})}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-400 text-sm font-medium mb-2">CONTACT NUMBER</label>
-              <input
-                type="text"
-                value={storeDetails.contactNumber}
-                onChange={(e) => setStoreDetails({...storeDetails, contactNumber: e.target.value})}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-400 text-sm font-medium mb-2">TAX ID</label>
-              <input
-                type="text"
-                value={storeDetails.taxId}
-                onChange={(e) => setStoreDetails({...storeDetails, taxId: e.target.value})}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
-              />
-            </div>
-          </div>
-
-          <button className="mt-6 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors">
-            Save Changes
-          </button>
-        </div>
+        {/* Store Details Section - Using OwnerShopSettings Component */}
+        <OwnerShopSettings />
 
         {/* Preferences Section */}
         <div className="bg-gray-800 rounded-xl p-6">

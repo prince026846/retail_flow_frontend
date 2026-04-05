@@ -28,21 +28,26 @@ const CategorySplitChart = ({ data = [], labels = [] }) => {
         />
       </div>
       
-      <div className="mt-6 space-y-3">
-        {chartLabels.map((label, index) => (
-          <div key={index} className="flex items-center justify-between">
-            <div className="flex items-center">
-              <div 
-                className="w-3 h-3 rounded-full mr-3" 
-                style={{ backgroundColor: colors[index] }}
-              ></div>
-              <span className="text-sm text-gray-300">{label}</span>
+      <div className="mt-6 space-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+        {chartLabels.map((label, index) => {
+          const total = chartData.reduce((a, b) => a + b, 0);
+          const percentage = total > 0 ? ((chartData[index] / total) * 100).toFixed(1) : 0;
+          
+          return (
+            <div key={index} className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div 
+                  className="w-3 h-3 rounded-full mr-3" 
+                  style={{ backgroundColor: colors[index % colors.length] }}
+                ></div>
+                <span className="text-sm text-gray-300">{label}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-sm font-semibold text-gray-100">{percentage}%</span>
+              </div>
             </div>
-            <div className="text-right">
-              <span className="text-sm font-semibold text-gray-100">{chartData[index]}%</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

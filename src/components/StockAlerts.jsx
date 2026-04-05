@@ -1,6 +1,9 @@
 import React from 'react';
 
-const StockAlerts = ({ lowStockCount = 3, deadStockCount = 12 }) => {
+const StockAlerts = ({ lowStockItems = [], deadStockItems = [] }) => {
+  const lowStockCount = lowStockItems.length;
+  const deadStockCount = deadStockItems.length;
+
   return (
     <div className="space-y-4 lg:space-y-6 mb-6 lg:mb-8">
       {/* Low Stock Alert */}
@@ -24,18 +27,15 @@ const StockAlerts = ({ lowStockCount = 3, deadStockCount = 12 }) => {
         </div>
         
         <div className="space-y-2">
-          <div className="flex items-center justify-between p-3 card card-hover group">
-            <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors duration-200">Wireless Headphones</span>
-            <span className="text-xs text-orange-400 font-medium bg-orange-500/20 px-2 py-1 rounded-full">2 units left</span>
-          </div>
-          <div className="flex items-center justify-between p-3 card card-hover group">
-            <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors duration-200">Running Shoes</span>
-            <span className="text-xs text-orange-400 font-medium bg-orange-500/20 px-2 py-1 rounded-full">5 units left</span>
-          </div>
-          <div className="flex items-center justify-between p-3 card card-hover group">
-            <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors duration-200">Smart Watch</span>
-            <span className="text-xs text-orange-400 font-medium bg-orange-500/20 px-2 py-1 rounded-full">8 units left</span>
-          </div>
+          {lowStockItems.slice(0, 3).map((item, idx) => (
+            <div key={idx} className="flex items-center justify-between p-3 card card-hover group">
+              <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors duration-200">{item.name}</span>
+              <span className="text-xs text-orange-400 font-medium bg-orange-500/20 px-2 py-1 rounded-full">{item.stock} left</span>
+            </div>
+          ))}
+          {lowStockCount === 0 && (
+            <div className="text-sm text-gray-500 text-center py-2 italic font-medium">Inventory levels healthy.</div>
+          )}
         </div>
         
         <button className="w-full mt-4 btn-warning">
@@ -43,7 +43,7 @@ const StockAlerts = ({ lowStockCount = 3, deadStockCount = 12 }) => {
         </button>
       </div>
 
-      {/* Dead Stock Alert */}
+      {/* Underperforming Alert (Replacing Dead Stock with real logic) */}
       <div className="alert-card alert-dead-stock card-hover group">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 space-y-3 sm:space-y-0">
           <div className="flex items-center">
@@ -53,8 +53,8 @@ const StockAlerts = ({ lowStockCount = 3, deadStockCount = 12 }) => {
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-100 group-hover:text-gray-50 transition-colors duration-200">Dead Stock</h3>
-              <p className="text-sm text-red-400">Stagnant items requiring attention</p>
+              <h3 className="text-lg font-semibold text-gray-100 group-hover:text-gray-50 transition-colors duration-200">Stagnant Stock</h3>
+              <p className="text-sm text-red-400">High stock, Zero sales (30d+)</p>
             </div>
           </div>
           <div className="text-right sm:text-left">
@@ -64,22 +64,19 @@ const StockAlerts = ({ lowStockCount = 3, deadStockCount = 12 }) => {
         </div>
         
         <div className="space-y-2">
-          <div className="flex items-center justify-between p-3 card card-hover group">
-            <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors duration-200">Table Lamp</span>
-            <span className="text-xs text-red-400 font-medium bg-red-500/20 px-2 py-1 rounded-full">120 days</span>
-          </div>
-          <div className="flex items-center justify-between p-3 card card-hover group">
-            <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors duration-200">Winter Scarf</span>
-            <span className="text-xs text-red-400 font-medium bg-red-500/20 px-2 py-1 rounded-full">95 days</span>
-          </div>
-          <div className="flex items-center justify-between p-3 card card-hover group">
-            <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors duration-200">Radio Set</span>
-            <span className="text-xs text-red-400 font-medium bg-red-500/20 px-2 py-1 rounded-full">87 days</span>
-          </div>
+          {deadStockItems.slice(0, 3).map((item, idx) => (
+            <div key={idx} className="flex items-center justify-between p-3 card card-hover group">
+              <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors duration-200">{item.name}</span>
+              <span className="text-xs text-red-400 font-medium bg-red-500/20 px-2 py-1 rounded-full">{item.stock} in stock</span>
+            </div>
+          ))}
+          {deadStockCount === 0 && (
+            <div className="text-sm text-gray-500 text-center py-2 italic font-medium">Optimal stock velocity maintained.</div>
+          )}
         </div>
         
         <button className="w-full mt-4 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-all duration-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-900 hover:shadow-glow-orange">
-          View All Dead Stock Items
+          Inventory Analytics
         </button>
       </div>
     </div>

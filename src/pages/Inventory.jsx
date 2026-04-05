@@ -9,30 +9,12 @@ import { formatCurrency, isLowStock } from "../utils/helpers";
 import { getProducts, createProduct, updateProduct, deleteProduct } from "../services/api";
 
 const Inventory = () => {
-  const { addProduct, updateProduct, deleteProduct } = useAppContext();
+  const { products, addProduct, updateProduct, deleteProduct, wsConnected, user } = useAppContext();
 
-  const [products, setProducts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [modalMode, setModalMode] = useState("add");
   const [notification, setNotification] = useState({ message: '', type: 'info' });
-
-  const loadProducts = async () => {
-    try {
-      const data = await getProducts();
-      setProducts(data);
-    } catch (err) {
-      console.error("Products fetch error:", err);
-      setNotification({
-        message: "Failed to load products",
-        type: "error"
-      });
-    }
-  };
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
 
   const handleAddProduct = () => {
     setModalMode("add");
@@ -49,13 +31,13 @@ const Inventory = () => {
   const handleSaveProduct = async (formData) => {
     try {
       if (modalMode === "add") {
-        await createProduct(formData);
+        await addProduct(formData);
         setNotification({
           message: "Product created successfully",
           type: "success"
         });
       } else {
-        await updateProduct(editingProduct.id, formData);
+        await updateProduct(editingProduct._id || editingProduct.id, formData);
         setNotification({
           message: "Product updated successfully",
           type: "success"
@@ -63,7 +45,6 @@ const Inventory = () => {
       }
 
       setIsModalOpen(false);
-      loadProducts();
 
     } catch (err) {
       console.error("Save product error:", err);
@@ -83,7 +64,6 @@ const Inventory = () => {
         message: "Product deleted successfully",
         type: "success"
       });
-      loadProducts();
     } catch (err) {
       console.error("Delete error:", err);
       setNotification({
@@ -215,7 +195,7 @@ const Inventory = () => {
             <div className="text-3xl group-hover:scale-110 transition-transform duration-300">💰</div>
           </div>
           <p className="text-3xl font-bold text-gray-100">
-            ${products.reduce((total, p) => total + (p.price * p.stock), 0).toLocaleString()}
+            {formatCurrency(products.reduce((total, p) => total + (p.price * p.stock), 0))}
           </p>
           <div className="mt-2 text-xs text-gray-500">Current inventory value</div>
         </div>
@@ -248,7 +228,7 @@ const Inventory = () => {
       />
 
       {/* WebSocket Status Indicator */}
-      <WebSocketStatus connected={false} userRole="Owner" />
+      <WebSocketStatus connected={wsConnected} userRole={user?.role || "Owner"} />
 
     </DashboardLayout>
   );

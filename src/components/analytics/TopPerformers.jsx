@@ -1,16 +1,7 @@
 import React from 'react';
 
 const TopPerformers = ({ data = [], loading = false }) => {
-  // Default data matching the screenshot
-  const defaultData = [
-    { name: "Quantum Pro Watch", sales: 2400, percentage: 85 },
-    { name: "Nebulo Audio Kit", sales: 1800, percentage: 75 },
-    { name: "Stellar Drone X", sales: 1500, percentage: 65 },
-    { name: "Cosmic VR Headset", sales: 1200, percentage: 55 },
-    { name: "Infinity Phone Case", sales: 900, percentage: 45 }
-  ];
-
-  const performers = data.length > 0 ? data : defaultData;
+  const performers = data;
 
   if (loading) {
     return (
@@ -52,31 +43,38 @@ const TopPerformers = ({ data = [], loading = false }) => {
       </div>
       
       <div className="space-y-4">
-        {performers.map((item, index) => (
-          <div key={index} className="flex items-center justify-between">
-            <div className="flex items-center flex-1 min-w-0">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center mr-3">
-                <span className="text-blue-400 text-sm font-semibold">{index + 1}</span>
+        {performers.length > 0 ? (
+          performers.map((item, index) => (
+            <div key={index} className="flex items-center justify-between">
+              <div className="flex items-center flex-1 min-w-0">
+                <div className="flex-shrink-0 w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center mr-3">
+                  <span className="text-blue-400 text-sm font-semibold">{index + 1}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-medium truncate">{item.name}</p>
+                  <p className="text-gray-400 text-xs">{formatSales(item.sales)}</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-medium truncate">{item.name}</p>
-                <p className="text-gray-400 text-xs">{formatSales(item.sales)}</p>
+              
+              <div className="flex items-center ml-4">
+                <div className="w-24 bg-gray-700 rounded-full h-2 mr-3 overflow-hidden">
+                  <div 
+                    className={`h-full ${getBarColor(item.percentage)} transition-all duration-500 rounded-full`}
+                    style={{ width: `${item.percentage}%` }}
+                  ></div>
+                </div>
+                <span className="text-white text-sm font-medium w-12 text-right">
+                  {item.percentage}%
+                </span>
               </div>
             </div>
-            
-            <div className="flex items-center ml-4">
-              <div className="w-24 bg-gray-700 rounded-full h-2 mr-3 overflow-hidden">
-                <div 
-                  className={`h-full ${getBarColor(item.percentage)} transition-all duration-500 rounded-full`}
-                  style={{ width: `${item.percentage}%` }}
-                ></div>
-              </div>
-              <span className="text-white text-sm font-medium w-12 text-right">
-                {item.percentage}%
-              </span>
-            </div>
+          ))
+        ) : (
+          <div className="py-10 text-center">
+            <div className="text-4xl mb-3 opacity-20">📊</div>
+            <p className="text-gray-500 text-sm italic">No sales data available yet.</p>
           </div>
-        ))}
+        )}
       </div>
       
       <div className="mt-6 pt-4 border-t border-gray-700">

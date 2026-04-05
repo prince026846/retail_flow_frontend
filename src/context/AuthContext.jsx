@@ -31,8 +31,8 @@ export function AuthProvider({ children }) {
         }
 
         setUser({
-          _id: payload.sub,  // Extract MongoDB ObjectId from sub field
-          email: payload.sub,  // Use 'sub' consistently for email/username
+          _id: payload.sub,
+          email: payload.email,
           role: payload.role
         })
         setIsAuthenticated(true)
@@ -66,8 +66,8 @@ export function AuthProvider({ children }) {
       }
 
       setUser({
-        _id: payload.sub,  // Extract MongoDB ObjectId from sub field
-        email: payload.sub,  // Use 'sub' consistently for email/username
+        _id: payload.sub,
+        email: payload.email,
         role: payload.role
       })
 

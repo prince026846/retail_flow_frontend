@@ -54,7 +54,9 @@ export function validateProduct(product) {
 
 // Check if product is low on stock
 export function isLowStock(product) {
-  return product.quantity < 5;
+  const stock = product.stock !== undefined ? product.stock : product.quantity;
+  const threshold = product.low_stock_threshold !== undefined ? product.low_stock_threshold : 10;
+  return stock < threshold;
 }
 
 // Calculate total for cart items
