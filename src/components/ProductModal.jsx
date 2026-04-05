@@ -10,7 +10,6 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
     barcode: '',
     low_stock_threshold: '10',
     supplier: 'Nexus Global Logistics',
-    image: null
   });
   const [errors, setErrors] = useState({});
 
@@ -25,7 +24,6 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
         barcode: product.barcode || '',
         low_stock_threshold: product.low_stock_threshold ?? '10',
         supplier: product.supplier || 'Nexus Global Logistics',
-        image: product.image || null
       });
     } else {
       setFormData({ 
@@ -37,23 +35,11 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
         barcode: '', 
         low_stock_threshold: '10',
         supplier: 'Nexus Global Logistics',
-        image: null
       });
     }
     setErrors({});
   }, [product, isOpen]);
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setErrors(prev => ({ ...prev, image: 'File size must be less than 5MB' }));
-        return;
-      }
-      setFormData(prev => ({ ...prev, image: file }));
-      if (errors.image) setErrors(prev => ({ ...prev, image: '' }));
-    }
-  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -130,9 +116,7 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
       low_stock_threshold: formData.low_stock_threshold !== ''
         ? parseInt(formData.low_stock_threshold, 10)
         : 10,
-      supplier: formData.supplier ? formData.supplier.trim() : "N/A",
-      // Remove File object before sending as JSON (JSON cannot send files)
-      image: (formData.image instanceof File) ? null : formData.image
+      supplier: formData.supplier ? formData.supplier.trim() : "N/A"
     };
 
     onSave(payload);
@@ -166,31 +150,6 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Product Image Upload */}
-            <div>
-              <label htmlFor="productImage" className="block text-sm font-medium text-gray-300 mb-2">PRODUCT IMAGE</label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-md hover:border-gray-500 transition-colors">
-                <div className="space-y-1 text-center">
-                  <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  <div className="flex text-sm text-gray-400">
-                    <label htmlFor="file-upload" className="relative cursor-pointer bg-gray-800 rounded-md font-medium text-blue-400 hover:text-blue-300 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
-                      <span>Drop image here or browse</span>
-                      <input id="file-upload" name="file-upload" type="file" className="sr-only" accept="image/*" onChange={handleImageUpload} />
-                    </label>
-                  </div>
-                  <p className="text-xs text-gray-500">Supports JPG, PNG up to 5MB</p>
-                  {formData.image && (
-                    <div className="mt-2 text-sm text-green-400">
-                      {formData.image.name}
-                    </div>
-                  )}
-                  {errors.image && <p className="text-red-400 text-sm mt-1">{errors.image}</p>}
-                </div>
-              </div>
-            </div>
-
             {/* Product Name and Category - Horizontal */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
