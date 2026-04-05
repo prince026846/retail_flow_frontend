@@ -98,17 +98,24 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
     }
 
     const parsedStock = parseInt(formData.stock, 10);
-    const parsedPrice = parseFloat(formData.price);
-    const parsedCostPrice = parseFloat(formData.cost_price);
+    const parsedPrice = parseFloat(String(formData.price).replace(/[^\d.-]/g, ''));
+    const parsedCostPrice = parseFloat(String(formData.cost_price).replace(/[^\d.-]/g, ''));
+
+    console.log('Submitting Product Data:', { 
+        name: formData.name, 
+        price: parsedPrice, 
+        stock: parsedStock,
+        original_price: formData.price
+    });
 
     // Hard guard — never let NaN reach the server
-    if (isNaN(parsedStock) || isNaN(parsedPrice) || isNaN(parsedCostPrice)) {
+    if (isNaN(parsedStock) || isNaN(parsedPrice)) {
       setErrors(prev => ({
         ...prev,
-        ...(isNaN(parsedStock) && { stock: 'Stock is required' }),
-        ...(isNaN(parsedPrice) && { price: 'Price is required' }),
-        ...(isNaN(parsedCostPrice) && { cost_price: 'Cost price is required' }),
+        ...(isNaN(parsedStock) && { stock: 'Stock is required and must be a number' }),
+        ...(isNaN(parsedPrice) && { price: 'Selling Price is required and must be a number' }),
       }));
+      alert("Please fix the errors: Stock and Selling Price are required.");
       return;
     }
 
@@ -116,19 +123,20 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
     const payload = {
       name: formData.name.trim(),                   // str  (required)
       price: parsedPrice,                           // float (required)
-      cost_price: parsedCostPrice,                  // float (optional)
+      cost_price: isNaN(parsedCostPrice) ? 0 : parsedCostPrice, 
       stock: parsedStock,                           // int  (required)
-      category: formData.category.trim() || null,   // Optional[str]
-      barcode: formData.barcode.trim() || null,     // Optional[str]
+      category: formData.category ? formData.category.trim() : "General",
+      barcode: formData.barcode ? formData.barcode.trim() : null,
       low_stock_threshold: formData.low_stock_threshold !== ''
         ? parseInt(formData.low_stock_threshold, 10)
-        : null,                                     // Optional[int]
-      supplier: formData.supplier.trim() || null,  // Optional[str]
-      image: formData.image                         // Optional[File]
+        : 10,
+      supplier: formData.supplier ? formData.supplier.trim() : "N/A",
+      image: formData.image
     };
 
     onSave(payload);
     onClose();
+
   };
 
   if (!isOpen) return null;
@@ -200,19 +208,27 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
 
               <div>
                 <label htmlFor="category" className="block text-sm font-medium text-gray-300 mb-2">CATEGORY</label>
-                <select 
+                <input 
+                  type="text"
+                  list="categories-list"
                   id="category" 
                   name="category" 
                   value={formData.category} 
                   onChange={handleChange}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="Electronics">Electronics</option>
-                  <option value="Clothing">Clothing</option>
-                  <option value="Food">Food</option>
-                  <option value="Books">Books</option>
-                  <option value="Other">Other</option>
-                </select>
+                  placeholder="Type or select category"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <datalist id="categories-list">
+                  <option value="Electronics" />
+                  <option value="Clothing" />
+                  <option value="Food" />
+                  <option value="Books" />
+                  <option value="Furniture" />
+                  <option value="Home Decor" />
+                  <option value="Office Supplies" />
+                  <option value="Stationery" />
+                  <option value="Appliances" />
+                </datalist>
               </div>
             </div>
 
@@ -240,94 +256,78 @@ const ProductModal = ({ isOpen, onClose, onSave, product = null, mode = 'add' })
 
               <div>
                 <label htmlFor="supplier" className="block text-sm font-medium text-gray-300 mb-2">SUPPLIER</label>
-                <select 
+                <input 
+                  type="text"
+                  list="suppliers-list"
                   id="supplier" 
                   name="supplier" 
                   value={formData.supplier} 
                   onChange={handleChange}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="Nexus Global Logistics">Nexus Global Logistics</option>
-                  <option value="TechSupply Co">TechSupply Co</option>
-                  <option value="Global Distributors">Global Distributors</option>
-                  <option value="Local Suppliers">Local Suppliers</option>
-                </select>
+                  placeholder="Type or select supplier"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <datalist id="suppliers-list">
+                  <option value="Nexus Global Logistics" />
+                  <option value="TechSupply Co" />
+                  <option value="Global Distributors" />
+                  <option value="Local Suppliers" />
+                  <option value="Standard Manufacturing" />
+                  <option value="Prime Solutions" />
+                </datalist>
               </div>
             </div>
 
-            {/* Cost Price and Selling Price - Horizontal */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Pricing Details */}
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="cost_price" className="block text-sm font-medium text-gray-300 mb-2">COST PRICE</label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">₹</span>
-                  <input 
-                    type="number" 
-                    id="cost_price" 
-                    name="cost_price" 
-                    value={formData.cost_price} 
-                    onChange={handleChange}
-                    className={`w-full pl-8 pr-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.cost_price ? 'border-red-500' : ''}`}
-                    placeholder="0.00" 
-                    step="0.01" 
-                    min="0" 
-                  />
-                </div>
-                {errors.cost_price && <p className="text-red-400 text-sm mt-1">{errors.cost_price}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="price" className="block text-sm font-medium text-gray-300 mb-2">SELLING PRICE</label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">₹</span>
-                  <input 
-                    type="number" 
-                    id="price" 
-                    name="price" 
-                    value={formData.price} 
-                    onChange={handleChange}
-                    className={`w-full pl-8 pr-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.price ? 'border-red-500' : ''}`}
-                    placeholder="0.00" 
-                    step="0.01" 
-                    min="0" 
-                  />
-                </div>
-                {errors.price && <p className="text-red-400 text-sm mt-1">{errors.price}</p>}
-              </div>
-            </div>
-
-            {/* Stock Quantity and Reorder Level - Horizontal */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="stock" className="block text-sm font-medium text-gray-300 mb-2">STOCK QUANTITY</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">COST PRICE (₹)</label>
                 <input 
                   type="number" 
-                  id="stock" 
+                  name="cost_price" 
+                  value={formData.cost_price} 
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                  placeholder="0.00" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">SELLING PRICE (₹) *</label>
+                <input 
+                  type="number" 
+                  name="price" 
+                  value={formData.price} 
+                  onChange={handleChange}
+                  className={`w-full px-3 py-2 bg-gray-700 border ${errors.price ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white`}
+                  placeholder="0.00" 
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Inventory Details */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">STOCK QUANTITY *</label>
+                <input 
+                  type="number" 
                   name="stock" 
                   value={formData.stock} 
                   onChange={handleChange}
-                  className={`w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.stock ? 'border-red-500' : ''}`}
+                  className={`w-full px-3 py-2 bg-gray-700 border ${errors.stock ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white`}
                   placeholder="0" 
-                  min="0" 
-                  step="1" 
+                  required
                 />
-                {errors.stock && <p className="text-red-400 text-sm mt-1">{errors.stock}</p>}
               </div>
-
               <div>
-                <label htmlFor="low_stock_threshold" className="block text-sm font-medium text-gray-300 mb-2">REORDER LEVEL</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">REORDER LEVEL</label>
                 <input 
                   type="number" 
-                  id="low_stock_threshold" 
                   name="low_stock_threshold"
                   value={formData.low_stock_threshold} 
                   onChange={handleChange}
-                  className={`w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.low_stock_threshold ? 'border-red-500' : ''}`}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
                   placeholder="10" 
-                  min="0" 
-                  step="1" 
                 />
-                {errors.low_stock_threshold && <p className="text-red-400 text-sm mt-1">{errors.low_stock_threshold}</p>}
               </div>
             </div>
 
